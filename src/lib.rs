@@ -1,5 +1,5 @@
 mod memory;
-
+mod error;
 
 #[cfg(test)]
 mod tests {
