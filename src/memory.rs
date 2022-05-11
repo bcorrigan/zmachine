@@ -43,11 +43,11 @@ impl StackFrame {
     }
 
     fn read_local(&self, stack: &Stack, i: u16) -> u16 {
-        stack[self.bp+i]
+        stack[self.bp-i]
     }
 
     fn write_local(&self, stack: &mut Stack, i:u16, val: u16) {
-        stack[self.bp+i] = val;
+        stack[self.bp-i] = val;
     }
 }
 
@@ -58,6 +58,17 @@ impl Stack {
         } else {
             self.sp=self.sp-1;
             return Ok(self[self.sp])
+        }
+    }
+
+    fn push(&mut self, frame:&mut StackFrame, val: u16) -> Result<(), Error> {
+        let new_sp = self.sp + 1;
+        self.sp=new_sp;
+        if new_sp>self.stack.len() as u16 {
+            Err(Error::ZMachineError("Stack Overflow".to_string()))
+        } else {
+            self[new_sp] = val;
+            Ok(())
         }
     }
 }
