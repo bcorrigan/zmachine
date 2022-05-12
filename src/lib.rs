@@ -1,5 +1,6 @@
 mod memory;
 mod error;
+mod object;
 
 #[cfg(test)]
 mod tests {
