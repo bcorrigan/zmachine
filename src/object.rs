@@ -6,7 +6,7 @@ use crate::memory::Memory;
 
 
 struct Object<'a> {
-    mem: &'a Memory 
+    mem: &'a mut Memory 
 }
 
 impl<'a>  Object<'a> {
@@ -22,10 +22,28 @@ impl<'a>  Object<'a> {
         self.mem.object_table() + Object::PROPMAX as u16 * 2 - Object::SIZE as u16
     }
 
+    fn get_attr_bytes(&self, obj: u8) -> u32 {
+        self.mem.read_u32(self.object_ptr() + (obj * Object::SIZE) as u16)
+    }
+
+    fn write_attr_bytes(&mut self, obj: u8, attrs: u32) {
+        self.mem.write_u32(self.object_ptr() + (obj * Object::SIZE) as u16, attrs);
+    }
+
     //There are 32 attrs bits across 4 bytes
     //we need to find which byte has the attr, and then test the appropriate bit in that byte
-    fn attr_test(&self, obj: u8, attr: u8) -> bool {
-        let attr_bytes = self.mem.read_u32(self.object_ptr() + (obj * Object::SIZE) as u16);
-        attr_bytes & (1 << (31 - attr)) != 0
+    fn attr_test(&mut self, obj: u8, attr: u8) -> bool {
+        self.get_attr_bytes(obj) & (1 << (31 - attr)) != 0
     }
+
+    fn attr_set(&mut self, obj: u8, attr: u8) {
+        self.write_attr_bytes( obj, self.get_attr_bytes(obj) | 1 << (31 - attr));
+    }
+
+    fn attr_clear(&mut self, obj: u8, attr: u8) {
+        self.write_attr_bytes( obj, self.get_attr_bytes(obj) & !(1 << (31 - attr)));
+    }
+
+    
+
 }

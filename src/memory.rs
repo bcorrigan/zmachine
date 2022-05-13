@@ -98,6 +98,14 @@ impl Memory {
          self[addr + 3] as u32
     }
 
+    pub fn write_u32(&mut self, addr: u16, val: u32) {
+        let bytes = val.to_be_bytes();
+        self[addr] = bytes[0];
+        self[addr+1] = bytes[1];
+        self[addr+2] = bytes[2];
+        self[addr+3] = bytes[3];
+    }
+
     //TODO various legality checks as some areas of memory have write restrictions
     pub fn write_u8(&mut self, addr:u16, val:u8) {
         self[addr] = val;
