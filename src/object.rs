@@ -10,24 +10,28 @@ struct Object<'a> {
 }
 
 impl<'a>  Object<'a> {
-    pub const PARENT:u8 = 4;
-    const SIBLING:u8 = 5;
-    const CHILD:u8 = 6;
-    const PROPS:u8 = 7;
-    pub const SIZE:u8 = 9;
+    pub const PARENT:u16 = 4;
+    const SIBLING:u16 = 5;
+    const CHILD:u16 = 6;
+    const PROPS:u16 = 7;
+    pub const SIZE:u16 = 9;
 
-    const PROPMAX:u8 = 31;
+    const PROPMAX:u16 = 31;
 
-    fn object_ptr(&self) -> u16 {
-        self.mem.object_table() + Object::PROPMAX as u16 * 2 - Object::SIZE as u16
+    fn object_table_ptr(&self) -> u16 {
+        self.mem.object_table() + Object::PROPMAX * 2 - Object::SIZE 
+    }
+
+    fn object_ptr(&self, obj: u8) -> u16 {
+        self.object_table_ptr() + (obj as u16 * Object::SIZE)
     }
 
     fn get_attr_bytes(&self, obj: u8) -> u32 {
-        self.mem.read_u32(self.object_ptr() + (obj * Object::SIZE) as u16)
+        self.mem.read_u32(self.object_table_ptr() + (obj as u16 * Object::SIZE))
     }
 
     fn write_attr_bytes(&mut self, obj: u8, attrs: u32) {
-        self.mem.write_u32(self.object_ptr() + (obj * Object::SIZE) as u16, attrs);
+        self.mem.write_u32(self.object_table_ptr() + (obj as u16 * Object::SIZE), attrs);
     }
 
     //There are 32 attrs bits across 4 bytes
@@ -45,21 +49,39 @@ impl<'a>  Object<'a> {
     }
 
     fn inside(&self, obj_a: u8, obj_b: u8) -> bool {
-        self.mem.read_u8(self.object_ptr() + (obj_a * Object::SIZE) as u16 + Object::PARENT as u16) == obj_b
+        self.mem.read_u8(self.object_ptr(obj_a) + Object::PARENT) == obj_b
     }
 
     fn sibling(&self, obj: u8) -> u8 {
-        self.mem.read_u8(self.object_ptr() + (obj * Object::SIZE) as u16 + Object::SIBLING as u16)    
+        self.mem.read_u8(self.object_ptr(obj) + Object::SIBLING)    
     }
 
     fn parent(&self, obj: u8) -> u8 {
-        self.mem.read_u8(self.object_ptr() + (obj * Object::SIZE) as u16 + Object::PARENT as u16)    
+        self.mem.read_u8(self.object_ptr(obj) + Object::PARENT)    
     }
 
     fn child(&self, obj: u8) -> u8 {
-        self.mem.read_u8(self.object_ptr() + (obj * Object::SIZE) as u16 + Object::CHILD as u16)    
+        self.mem.read_u8(self.object_ptr(obj) + Object::CHILD)    
     }
-    
+
+    fn remove(&self, obj: u8) {
+        let ptr: u16 = self.object_ptr(obj);
+        let parent = self.parent(obj);
+        
+        if parent==0 { //no parent
+            return;
+        }
+
+        let sibling = self.sibling(obj);
+        let child = self.child(obj);
+
+        if child == obj {
+            //immediate child
+        } else {
+            
+        }
+
+    }
 
     
 
