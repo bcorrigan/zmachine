@@ -44,6 +44,23 @@ impl<'a>  Object<'a> {
         self.write_attr_bytes( obj, self.get_attr_bytes(obj) & !(1 << (31 - attr)));
     }
 
+    fn inside(&self, obj_a: u8, obj_b: u8) -> bool {
+        self.mem.read_u8(self.object_ptr() + (obj_a * Object::SIZE) as u16 + Object::PARENT as u16) == obj_b
+    }
+
+    fn sibling(&self, obj: u8) -> u8 {
+        self.mem.read_u8(self.object_ptr() + (obj * Object::SIZE) as u16 + Object::SIBLING as u16)    
+    }
+
+    fn parent(&self, obj: u8) -> u8 {
+        self.mem.read_u8(self.object_ptr() + (obj * Object::SIZE) as u16 + Object::PARENT as u16)    
+    }
+
+    fn child(&self, obj: u8) -> u8 {
+        self.mem.read_u8(self.object_ptr() + (obj * Object::SIZE) as u16 + Object::CHILD as u16)    
+    }
+    
+
     
 
 }
