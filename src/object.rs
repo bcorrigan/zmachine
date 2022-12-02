@@ -64,10 +64,21 @@ impl<'a>  Object<'a> {
         self.mem.read_u8(self.object_ptr(obj) + Object::CHILD)    
     }
 
+    fn write_sibling(&mut self, obj: u8, sibling: u8) {
+        self.mem.write_u8(self.object_ptr(obj) + Object::SIBLING, sibling)    
+    }
+
+    fn write_parent(&mut self, obj: u8, parent: u8) {
+        self.mem.write_u8(self.object_ptr(obj) + Object::PARENT, parent)    
+    }
+
+    fn write_child(&mut self, obj: u8, child: u8) {
+        self.mem.write_u8(self.object_ptr(obj) + Object::CHILD, child)    
+    }
+
     fn remove(&mut self, obj: u8) {
-        let ptr: u16 = self.object_ptr(obj);
         let parent = self.parent(obj);
-        
+
         if parent==0 { //no parent
             return;
         }
@@ -77,15 +88,13 @@ impl<'a>  Object<'a> {
 
         if child == obj {
             //immediate child
-            self.mem.write_u8(self.object_ptr(parent) + Object::CHILD, obj_sibling);
+            self.write_child(parent, obj_sibling);
         } else {
             while child!=0 {
-                let child_addr = self.object_ptr(child);
-
-                let sibling = self.mem.read_u8(child_addr + Object::SIBLING);
+                let sibling = self.child(child);
 
                 if sibling == obj {
-                    self.mem.write_u8(child_addr + Object::SIBLING, obj_sibling);
+                    self.write_sibling(child, obj_sibling);
                     break;
                 } else {
                     child = sibling;
@@ -93,9 +102,18 @@ impl<'a>  Object<'a> {
             }
         }
 
-        self.mem.write_u8(ptr + Object::SIBLING, 0);
-        self.mem.write_u8(ptr + Object::PARENT, 0);
+        self.write_sibling(obj, 0);
+        self.write_parent(obj, 0);
+    }
 
+    fn insert(&mut self, obj: u8, dest_obj: u8) {
+        if self.parent(obj) != 0 {
+            self.remove(obj);
+        }
+
+        self.write_sibling(obj, self.child(dest_obj));
+        self.write_child(dest_obj, obj);
+        self.write_parent(obj, dest_obj);
     }
 
     
