@@ -64,7 +64,7 @@ impl<'a>  Object<'a> {
         self.mem.read_u8(self.object_ptr(obj) + Object::CHILD)    
     }
 
-    fn remove(&self, obj: u8) {
+    fn remove(&mut self, obj: u8) {
         let ptr: u16 = self.object_ptr(obj);
         let parent = self.parent(obj);
         
@@ -72,14 +72,29 @@ impl<'a>  Object<'a> {
             return;
         }
 
-        let sibling = self.sibling(obj);
-        let child = self.child(obj);
+        let obj_sibling = self.sibling(obj);
+        let mut child = self.child(obj);
 
         if child == obj {
             //immediate child
+            self.mem.write_u8(self.object_ptr(parent) + Object::CHILD, obj_sibling);
         } else {
-            
+            while child!=0 {
+                let child_addr = self.object_ptr(child);
+
+                let sibling = self.mem.read_u8(child_addr + Object::SIBLING);
+
+                if sibling == obj {
+                    self.mem.write_u8(child_addr + Object::SIBLING, obj_sibling);
+                    break;
+                } else {
+                    child = sibling;
+                }
+            }
         }
+
+        self.mem.write_u8(ptr + Object::SIBLING, 0);
+        self.mem.write_u8(ptr + Object::PARENT, 0);
 
     }
 
