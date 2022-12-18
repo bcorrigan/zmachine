@@ -1,6 +1,6 @@
-
 use std::ops::{Deref, DerefMut, Index, IndexMut};
 use crate::error::Error;
+use num::Integer;
 
 pub struct Memory {
     mem: Vec<u8>,
@@ -26,7 +26,7 @@ impl StackFrame {
 
     //advance stack pointer for new locals & create new stackframe
     fn push(self, stack: &mut Stack, pc: u32) -> StackFrame {
-        stack.sp = stack.sp + 16; //16 locals 
+        stack.sp = stack.sp + 16; //16 locals
         StackFrame { prev: Box::new(Some(self)), pc: pc, bp: stack.sp }
     }
 
@@ -35,7 +35,7 @@ impl StackFrame {
         for p in stack.sp..=(self.bp - 16) { //erase current stack + 16 locals
             stack[p] = 0;
         }
-        stack.sp = self.bp - 16; 
+        stack.sp = self.bp - 16;
         match *self.prev {
             Some(prev) => Ok(prev),
             None => Err(Error::ZMachineError("Attempted to return from main routine".to_string()))
@@ -92,7 +92,7 @@ impl Memory {
     }
 
     pub fn read_u32(&self, addr:u16) -> u32 {
-        (self[addr] as u32) << 24 | 
+        (self[addr] as u32) << 24 |
         (self[addr + 1] as u32)  << 16 |
         (self[addr + 2] as u32)  << 8 |
          self[addr + 3] as u32
@@ -189,7 +189,7 @@ impl Memory {
 
 
 
-//VARIOUS BOILERPLATE 
+//VARIOUS BOILERPLATE
 
 impl Deref for Memory {
     type Target = Vec<u8>;
