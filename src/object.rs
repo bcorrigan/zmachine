@@ -2,20 +2,24 @@ use crate::memory::Memory;
 //use core::num::traits::Num;
 //use core::num::Num;
 use num::Integer;
+use num::traits::Unsigned;
+use num::traits::AsPrimitive;
+use num::traits::NumCast;
 
 use std::marker::PhantomData;
+use std::ops::*;
 
 /*
- * Here we implement all the object-level reading/writing 
+ * Here we implement all the object-level reading/writing
  */
 
 
-struct Object<'a, T: 'a>  where T: num::Integer {
+struct Object<'a, T: 'a>  where T: Into<u8> + Into<u16> + Add {
     mem: &'a mut Memory,
     phantom: PhantomData<&'a T>,
 }
 
-impl<'a, T>  Object<'_, T> where T: num::Integer {
+impl<'a, T>  Object<'_, T> where T: Into<u8> + Into<u16> + Add {
     const PARENT:u16 = 4;
     const SIBLING:u16 = 5;
     const CHILD:u16 = 6;
@@ -25,11 +29,11 @@ impl<'a, T>  Object<'_, T> where T: num::Integer {
     const PROPMAX:u16 = 31;
 
     fn object_table_ptr(&self) -> u16 {
-        self.mem.object_table() + Object::<T>::PROPMAX * 2 - Object::<T>::SIZE 
+        self.mem.object_table() + Object::<T>::PROPMAX * 2 - Object::<T>::SIZE
     }
 
-    fn object_ptr(&self, obj: T) -> u16 { 
-        self.object_table_ptr() + (obj as u16 * Object::<T>::SIZE)
+    fn object_ptr(&self, obj: T) -> u16 {
+        self.object_table_ptr() + (Into::<u16>::into(obj) * Object::<T>::SIZE)
     }
 
     fn get_attr_bytes(&self, obj: u8) -> u32 {
@@ -54,35 +58,35 @@ impl<'a, T>  Object<'_, T> where T: num::Integer {
         self.write_attr_bytes( obj, self.get_attr_bytes(obj) & !(1 << (31 - attr)));
     }
 
-    fn inside(&self, obj_a: u8, obj_b: u8) -> bool {
+    fn inside(&self, obj_a: T, obj_b: T) -> bool {
         self.mem.read_u8(self.object_ptr(obj_a) + Object::<T>::PARENT) == obj_b
     }
 
-    fn sibling(&self, obj: u8) -> u8 {
-        self.mem.read_u8(self.object_ptr(obj) + Object::<T>::SIBLING)    
+    fn sibling(&self, obj: T) -> u8 {
+        self.mem.read_u8(self.object_ptr(obj) + Object::<T>::SIBLING)
     }
 
-    fn parent(&self, obj: u8) -> u8 {
-        self.mem.read_u8(self.object_ptr(obj) + Object::<T>::PARENT)    
+    fn parent(&self, obj: T) -> u8 {
+        self.mem.read_u8(self.object_ptr(obj) + Object::<T>::PARENT) //these are read u8 but for wide will need to be u16 I think?
     }
 
-    fn child(&self, obj: u8) -> u8 {
-        self.mem.read_u8(self.object_ptr(obj) + Object::<T>::CHILD)    
+    fn child(&self, obj: T) -> u8 {
+        self.mem.read_u8(self.object_ptr(obj) + Object::<T>::CHILD)
     }
 
-    fn write_sibling(&mut self, obj: u8, sibling: u8) {
-        self.mem.write_u8(self.object_ptr(obj) + Object::<T>::SIBLING, sibling)    
+    fn write_sibling(&mut self, obj: T, sibling: T) {
+        self.mem.write_u8(self.object_ptr(obj) + Object::<T>::SIBLING, sibling)
     }
 
-    fn write_parent(&mut self, obj: u8, parent: u8) {
-        self.mem.write_u8(self.object_ptr(obj) + Object::<T>::PARENT, parent)    
+    fn write_parent(&mut self, obj: T, parent: T) {
+        self.mem.write_u8(self.object_ptr(obj) + Object::<T>::PARENT, parent)
     }
 
-    fn write_child(&mut self, obj: u8, child: u8) {
-        self.mem.write_u8(self.object_ptr(obj) + Object::<T>::CHILD, child)    
+    fn write_child(&mut self, obj: T, child: T) {
+        self.mem.write_u8(self.object_ptr(obj) + Object::<T>::CHILD, child)
     }
 
-    fn remove(&mut self, obj: u8) {
+    fn remove(&mut self, obj: T) {
         let parent = self.parent(obj);
 
         if parent==0 { //no parent
@@ -112,7 +116,7 @@ impl<'a, T>  Object<'_, T> where T: num::Integer {
         self.write_parent(obj, 0);
     }
 
-    fn insert(&mut self, obj: u8, dest_obj: u8) {
+    fn insert(&mut self, obj: T, dest_obj: T) {
         if self.parent(obj) != 0 {
             self.remove(obj);
         }
