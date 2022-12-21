@@ -2,24 +2,37 @@ use crate::memory::Memory;
 //use core::num::traits::Num;
 //use core::num::Num;
 use num::Integer;
-use num::traits::Unsigned;
-use num::traits::AsPrimitive;
-use num::traits::NumCast;
-
 use std::marker::PhantomData;
-use std::ops::*;
 
 /*
  * Here we implement all the object-level reading/writing
+ * Early z machines used 1 byte objects (ie there oculd be a total of 256 objects),
+  * and later used 2 byte objects - so this code is generic across u8 & u16
  */
-
-
-struct Object<'a, T: 'a>  where T: Into<u8> + Into<u16> + Add {
+struct Object<'a, T: 'a>  where T: Integer + Into<u8> + Into<u16> + Copy {
     mem: &'a mut Memory,
     phantom: PhantomData<&'a T>,
 }
 
-impl<'a, T>  Object<'_, T> where T: Into<u8> + Into<u16> + Add {
+trait ReadObject {
+    fn read_obj(&self, addr: u16, mem: &Memory) -> Self
+        where Self: Sized;
+}
+
+impl ReadObject for u8 {
+    fn read_obj(&self, addr: u16, mem: &Memory) -> u8 {
+        mem.read_u8(addr)
+    }
+}
+
+impl ReadObject for u16 {
+    fn read_obj(&self, addr: u16, mem: &Memory) -> u16 {
+        mem.read_u16(addr)
+    }
+}
+
+
+impl<'a, T>  Object<'_, T> where T: Integer + Into<u8> + Into<u16> + Copy + ReadObject {
     const PARENT:u16 = 4;
     const SIBLING:u16 = 5;
     const CHILD:u16 = 6;
@@ -50,57 +63,57 @@ impl<'a, T>  Object<'_, T> where T: Into<u8> + Into<u16> + Add {
         self.get_attr_bytes(obj) & (1 << (31 - attr)) != 0
     }
 
-    fn attr_set(&mut self, obj: u8, attr: u8) {
-        self.write_attr_bytes( obj, self.get_attr_bytes(obj) | 1 << (31 - attr));
+    fn attr_set(&mut self, obj: T, attr: u8) {
+        self.write_attr_bytes( obj.into(), self.get_attr_bytes(obj.into()) | 1 << (31 - attr));
     }
 
-    fn attr_clear(&mut self, obj: u8, attr: u8) {
-        self.write_attr_bytes( obj, self.get_attr_bytes(obj) & !(1 << (31 - attr)));
+    fn attr_clear(&mut self, obj: T, attr: u8) {
+        self.write_attr_bytes( obj.into(), self.get_attr_bytes(obj.into()) & !(1 << (31 - attr)));
     }
 
     fn inside(&self, obj_a: T, obj_b: T) -> bool {
-        self.mem.read_u8(self.object_ptr(obj_a) + Object::<T>::PARENT) == obj_b
+        self.mem.read_u8(self.object_ptr(obj_a) + Object::<T>::PARENT) == obj_b.into()
     }
 
-    fn sibling(&self, obj: T) -> u8 {
-        self.mem.read_u8(self.object_ptr(obj) + Object::<T>::SIBLING)
+    fn sibling(&self, obj: T) -> T {
+        obj.read_obj(self.object_ptr(obj) + Object::<T>::SIBLING, self.mem)
     }
 
-    fn parent(&self, obj: T) -> u8 {
-        self.mem.read_u8(self.object_ptr(obj) + Object::<T>::PARENT) //these are read u8 but for wide will need to be u16 I think?
+    fn parent(&self, obj: T) -> T {
+        obj.read_obj(self.object_ptr(obj) + Object::<T>::PARENT, self.mem)
     }
 
-    fn child(&self, obj: T) -> u8 {
-        self.mem.read_u8(self.object_ptr(obj) + Object::<T>::CHILD)
+    fn child(&self, obj: T) -> T {
+        obj.read_obj(self.object_ptr(obj) + Object::<T>::CHILD, self.mem)
     }
 
     fn write_sibling(&mut self, obj: T, sibling: T) {
-        self.mem.write_u8(self.object_ptr(obj) + Object::<T>::SIBLING, sibling)
+        self.mem.write_u8(self.object_ptr(obj) + Object::<T>::SIBLING, sibling.into())
     }
 
     fn write_parent(&mut self, obj: T, parent: T) {
-        self.mem.write_u8(self.object_ptr(obj) + Object::<T>::PARENT, parent)
+        self.mem.write_u8(self.object_ptr(obj) + Object::<T>::PARENT, parent.into())
     }
 
     fn write_child(&mut self, obj: T, child: T) {
-        self.mem.write_u8(self.object_ptr(obj) + Object::<T>::CHILD, child)
+        self.mem.write_u8(self.object_ptr(obj) + Object::<T>::CHILD, child.into())
     }
 
     fn remove(&mut self, obj: T) {
-        let parent = self.parent(obj);
+        let parent = self.parent(obj.clone());
 
-        if parent==0 { //no parent
+        if num::Zero::is_zero(&parent) {
             return;
         }
 
-        let obj_sibling = self.sibling(obj);
+        let obj_sibling = self.sibling(obj.clone());
         let mut child = self.child(obj);
 
         if child == obj {
             //immediate child
             self.write_child(parent, obj_sibling);
         } else {
-            while child!=0 {
+            while !num::Zero::is_zero(&child) {
                 let sibling = self.child(child);
 
                 if sibling == obj {
@@ -112,12 +125,12 @@ impl<'a, T>  Object<'_, T> where T: Into<u8> + Into<u16> + Add {
             }
         }
 
-        self.write_sibling(obj, 0);
-        self.write_parent(obj, 0);
+        self.write_sibling(obj, num::Zero::zero());
+        self.write_parent(obj, num::Zero::zero());
     }
 
     fn insert(&mut self, obj: T, dest_obj: T) {
-        if self.parent(obj) != 0 {
+        if !num::Zero::is_zero(&self.parent(obj)) {
             self.remove(obj);
         }
 
