@@ -49,6 +49,7 @@ impl<'a, T>  Object<'_, T> where T: Integer + Into<u8> + Into<u16> + Copy + Read
         self.object_table_ptr() + (Into::<u16>::into(obj) * Object::<T>::SIZE)
     }
 
+
     fn get_attr_bytes(&self, obj: u8) -> u32 {
         self.mem.read_u32(self.object_table_ptr() + (obj as u16 * Object::<T>::SIZE))
     }
@@ -86,6 +87,12 @@ impl<'a, T>  Object<'_, T> where T: Integer + Into<u8> + Into<u16> + Copy + Read
     fn child(&self, obj: T) -> T {
         obj.read_obj(self.object_ptr(obj) + Object::<T>::CHILD, self.mem)
     }
+
+    //address of the props table for given object 
+    fn props(&self, obj: T) -> u16 {
+        self.mem.read_u16(self.object_ptr(obj) + Object::<T>::PROPS)
+    }
+    
 
     fn write_sibling(&mut self, obj: T, sibling: T) {
         self.mem.write_u8(self.object_ptr(obj) + Object::<T>::SIBLING, sibling.into())
@@ -137,5 +144,12 @@ impl<'a, T>  Object<'_, T> where T: Integer + Into<u8> + Into<u16> + Copy + Read
         self.write_sibling(obj, self.child(dest_obj));
         self.write_child(dest_obj, obj);
         self.write_parent(obj, dest_obj);
+    }
+
+    fn print(&mut self, obj: T) {
+        if self.mem.read_u8(self.props(obj)) != 0 {
+            //ZSCII(obj+1)
+            //print(zscii_buf,zscii_ptr);
+        }
     }
 }

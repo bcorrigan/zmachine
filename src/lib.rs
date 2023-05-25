@@ -1,6 +1,8 @@
+#![allow(dead_code)]
 mod memory;
 mod error;
 mod object;
+
 
 #[cfg(test)]
 mod tests {
