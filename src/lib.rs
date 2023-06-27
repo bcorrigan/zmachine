@@ -1,8 +1,8 @@
 #![allow(dead_code)]
-mod memory;
 mod error;
+mod memory;
 mod object;
-
+mod zscii;
 
 #[cfg(test)]
 mod tests {

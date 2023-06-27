@@ -1,10 +1,10 @@
-use std::ops::{Deref, DerefMut, Index, IndexMut};
 use crate::error::Error;
 use num::Integer;
+use std::ops::{Deref, DerefMut, Index, IndexMut};
 
 pub struct Memory {
     mem: Vec<u8>,
-    stack: Stack
+    stack: Stack,
 }
 
 struct Stack {
@@ -14,57 +14,68 @@ struct Stack {
 
 struct StackFrame {
     prev: Box<Option<StackFrame>>, //ie the call stack
-    pc: u32, //program counter
+    pc: u32,                       //program counter
     bp: u16, //base pointer of this stack frame - illegal for sp to drop below this
-    //locals: Vec<u16>,
+             //locals: Vec<u16>,
 }
 
 impl StackFrame {
     fn main(mem: &Memory) -> StackFrame {
-        StackFrame { prev: Box::new(None), pc: mem.initial_pc() as u32, bp: 17 }
+        StackFrame {
+            prev: Box::new(None),
+            pc: mem.initial_pc() as u32,
+            bp: 17,
+        }
     }
 
     //advance stack pointer for new locals & create new stackframe
     fn push(self, stack: &mut Stack, pc: u32) -> StackFrame {
         stack.sp = stack.sp + 16; //16 locals
-        StackFrame { prev: Box::new(Some(self)), pc: pc, bp: stack.sp }
+        StackFrame {
+            prev: Box::new(Some(self)),
+            pc: pc,
+            bp: stack.sp,
+        }
     }
 
     //return to previous stack frame, zeroing out space used by this stack
     fn pop(self, stack: &mut Stack) -> Result<StackFrame, Error> {
-        for p in stack.sp..=(self.bp - 16) { //erase current stack + 16 locals
+        for p in stack.sp..=(self.bp - 16) {
+            //erase current stack + 16 locals
             stack[p] = 0;
         }
         stack.sp = self.bp - 16;
         match *self.prev {
             Some(prev) => Ok(prev),
-            None => Err(Error::ZMachineError("Attempted to return from main routine".to_string()))
+            None => Err(Error::ZMachineError(
+                "Attempted to return from main routine".to_string(),
+            )),
         }
     }
 
     fn read_local(&self, stack: &Stack, i: u16) -> u16 {
-        stack[self.bp-i]
+        stack[self.bp - i]
     }
 
-    fn write_local(&self, stack: &mut Stack, i:u16, val: u16) {
-        stack[self.bp-i] = val;
+    fn write_local(&self, stack: &mut Stack, i: u16, val: u16) {
+        stack[self.bp - i] = val;
     }
 }
 
 impl Stack {
-    fn pop(&mut self, frame:&StackFrame) -> Result<u16, Error> {
-        if self.sp<=frame.bp {
+    fn pop(&mut self, frame: &StackFrame) -> Result<u16, Error> {
+        if self.sp <= frame.bp {
             Err(Error::ZMachineError("Stack underflow".to_string()))
         } else {
-            self.sp=self.sp-1;
-            return Ok(self[self.sp])
+            self.sp = self.sp - 1;
+            return Ok(self[self.sp]);
         }
     }
 
-    fn push(&mut self, frame:&mut StackFrame, val: u16) -> Result<(), Error> {
+    fn push(&mut self, frame: &mut StackFrame, val: u16) -> Result<(), Error> {
         let new_sp = self.sp + 1;
-        self.sp=new_sp;
-        if new_sp>self.stack.len() as u16 {
+        self.sp = new_sp;
+        if new_sp > self.stack.len() as u16 {
             Err(Error::ZMachineError("Stack Overflow".to_string()))
         } else {
             self[new_sp] = val;
@@ -73,45 +84,47 @@ impl Stack {
     }
 }
 
-
 impl Memory {
     pub fn new(story: &[u8]) -> Self {
         Memory {
             mem: story.into(),
-            stack: Stack { stack: [0u16; 4096], sp:0 }
+            stack: Stack {
+                stack: [0u16; 4096],
+                sp: 0,
+            },
         }
     }
 
     //First define various read_* and write_* fns
-    pub fn read_u8(&self, addr:u16) -> u8 {
+    pub fn read_u8(&self, addr: u16) -> u8 {
         self[addr]
     }
 
-    pub fn read_u16(&self, addr:u16) -> u16 {
+    pub fn read_u16(&self, addr: u16) -> u16 {
         (self[addr] as u16) << 8 | self[addr + 1] as u16
     }
 
-    pub fn read_u32(&self, addr:u16) -> u32 {
-        (self[addr] as u32) << 24 |
-        (self[addr + 1] as u32)  << 16 |
-        (self[addr + 2] as u32)  << 8 |
-         self[addr + 3] as u32
+    pub fn read_u32(&self, addr: u16) -> u32 {
+        (self[addr] as u32) << 24
+            | (self[addr + 1] as u32) << 16
+            | (self[addr + 2] as u32) << 8
+            | self[addr + 3] as u32
     }
 
     pub fn write_u32(&mut self, addr: u16, val: u32) {
         let bytes = val.to_be_bytes();
         self[addr] = bytes[0];
-        self[addr+1] = bytes[1];
-        self[addr+2] = bytes[2];
-        self[addr+3] = bytes[3];
+        self[addr + 1] = bytes[1];
+        self[addr + 2] = bytes[2];
+        self[addr + 3] = bytes[3];
     }
 
     //TODO various legality checks as some areas of memory have write restrictions
-    pub fn write_u8(&mut self, addr:u16, val:u8) {
+    pub fn write_u8(&mut self, addr: u16, val: u8) {
         self[addr] = val;
     }
 
-    pub fn write_u16(&mut self, addr:u16, val:u16) {
+    pub fn write_u16(&mut self, addr: u16, val: u16) {
         let vals = val.to_be_bytes();
         self[addr] = vals[0];
         self[addr] = vals[1];
@@ -119,18 +132,20 @@ impl Memory {
 
     fn load(&mut self, id: u8, frame: &mut StackFrame) -> Result<u16, Error> {
         match id {
-            0x00 => { //pop from stack
+            0x00 => {
+                //pop from stack
                 self.stack.pop(frame)
-            },
-            0x01..=0x0f => { //read from locals
+            }
+            0x01..=0x0f => {
+                //read from locals
                 Ok(frame.read_local(&self.stack, id as u16))
-            },
-            _ => { //read from globals
-                Ok(self.read_u16( self.global_variables() + (id * 2) as u16 ))
+            }
+            _ => {
+                //read from globals
+                Ok(self.read_u16(self.global_variables() + (id * 2) as u16))
             }
         }
     }
-
 
     fn high_memory(&self) -> u16 {
         self.read_u16(0x04)
@@ -186,9 +201,6 @@ impl Memory {
     }
 }
 
-
-
-
 //VARIOUS BOILERPLATE
 
 impl Deref for Memory {
@@ -232,7 +244,6 @@ impl IndexMut<u32> for Memory {
         &mut self.mem[i as usize]
     }
 }
-
 
 impl Deref for Stack {
     type Target = [u16; 4096];

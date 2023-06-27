@@ -7,16 +7,20 @@ use std::marker::PhantomData;
 /*
  * Here we implement all the object-level reading/writing
  * Early z machines used 1 byte objects (ie there oculd be a total of 256 objects),
-  * and later used 2 byte objects - so this code is generic across u8 & u16
+ * and later used 2 byte objects - so this code is generic across u8 & u16
  */
-struct Object<'a, T: 'a>  where T: Integer + Into<u8> + Into<u16> + Copy {
+struct Object<'a, T: 'a>
+where
+    T: Integer + Into<u8> + Into<u16> + Copy,
+{
     mem: &'a mut Memory,
     phantom: PhantomData<&'a T>,
 }
 
 trait ReadObject {
     fn read_obj(&self, addr: u16, mem: &Memory) -> Self
-        where Self: Sized;
+    where
+        Self: Sized;
 }
 
 impl ReadObject for u8 {
@@ -31,15 +35,17 @@ impl ReadObject for u16 {
     }
 }
 
+impl<'a, T> Object<'_, T>
+where
+    T: Integer + Into<u8> + Into<u16> + Copy + ReadObject,
+{
+    const PARENT: u16 = 4;
+    const SIBLING: u16 = 5;
+    const CHILD: u16 = 6;
+    const PROPS: u16 = 7;
+    const SIZE: u16 = 9;
 
-impl<'a, T>  Object<'_, T> where T: Integer + Into<u8> + Into<u16> + Copy + ReadObject {
-    const PARENT:u16 = 4;
-    const SIBLING:u16 = 5;
-    const CHILD:u16 = 6;
-    const PROPS:u16 = 7;
-    const SIZE:u16 = 9;
-
-    const PROPMAX:u16 = 31;
+    const PROPMAX: u16 = 31;
 
     fn object_table_ptr(&self) -> u16 {
         self.mem.object_table() + Object::<T>::PROPMAX * 2 - Object::<T>::SIZE
@@ -49,13 +55,16 @@ impl<'a, T>  Object<'_, T> where T: Integer + Into<u8> + Into<u16> + Copy + Read
         self.object_table_ptr() + (Into::<u16>::into(obj) * Object::<T>::SIZE)
     }
 
-
     fn get_attr_bytes(&self, obj: u8) -> u32 {
-        self.mem.read_u32(self.object_table_ptr() + (obj as u16 * Object::<T>::SIZE))
+        self.mem
+            .read_u32(self.object_table_ptr() + (obj as u16 * Object::<T>::SIZE))
     }
 
     fn write_attr_bytes(&mut self, obj: u8, attrs: u32) {
-        self.mem.write_u32(self.object_table_ptr() + (obj as u16 * Object::<T>::SIZE), attrs);
+        self.mem.write_u32(
+            self.object_table_ptr() + (obj as u16 * Object::<T>::SIZE),
+            attrs,
+        );
     }
 
     //There are 32 attrs bits across 4 bytes
@@ -65,15 +74,23 @@ impl<'a, T>  Object<'_, T> where T: Integer + Into<u8> + Into<u16> + Copy + Read
     }
 
     fn attr_set(&mut self, obj: T, attr: u8) {
-        self.write_attr_bytes( obj.into(), self.get_attr_bytes(obj.into()) | 1 << (31 - attr));
+        self.write_attr_bytes(
+            obj.into(),
+            self.get_attr_bytes(obj.into()) | 1 << (31 - attr),
+        );
     }
 
     fn attr_clear(&mut self, obj: T, attr: u8) {
-        self.write_attr_bytes( obj.into(), self.get_attr_bytes(obj.into()) & !(1 << (31 - attr)));
+        self.write_attr_bytes(
+            obj.into(),
+            self.get_attr_bytes(obj.into()) & !(1 << (31 - attr)),
+        );
     }
 
     fn inside(&self, obj_a: T, obj_b: T) -> bool {
-        self.mem.read_u8(self.object_ptr(obj_a) + Object::<T>::PARENT) == obj_b.into()
+        self.mem
+            .read_u8(self.object_ptr(obj_a) + Object::<T>::PARENT)
+            == obj_b.into()
     }
 
     fn sibling(&self, obj: T) -> T {
@@ -88,22 +105,24 @@ impl<'a, T>  Object<'_, T> where T: Integer + Into<u8> + Into<u16> + Copy + Read
         obj.read_obj(self.object_ptr(obj) + Object::<T>::CHILD, self.mem)
     }
 
-    //address of the props table for given object 
+    //address of the props table for given object
     fn props(&self, obj: T) -> u16 {
         self.mem.read_u16(self.object_ptr(obj) + Object::<T>::PROPS)
     }
-    
 
     fn write_sibling(&mut self, obj: T, sibling: T) {
-        self.mem.write_u8(self.object_ptr(obj) + Object::<T>::SIBLING, sibling.into())
+        self.mem
+            .write_u8(self.object_ptr(obj) + Object::<T>::SIBLING, sibling.into())
     }
 
     fn write_parent(&mut self, obj: T, parent: T) {
-        self.mem.write_u8(self.object_ptr(obj) + Object::<T>::PARENT, parent.into())
+        self.mem
+            .write_u8(self.object_ptr(obj) + Object::<T>::PARENT, parent.into())
     }
 
     fn write_child(&mut self, obj: T, child: T) {
-        self.mem.write_u8(self.object_ptr(obj) + Object::<T>::CHILD, child.into())
+        self.mem
+            .write_u8(self.object_ptr(obj) + Object::<T>::CHILD, child.into())
     }
 
     fn remove(&mut self, obj: T) {
