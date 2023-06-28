@@ -1,5 +1,4 @@
 use crate::error::Error;
-use num::Integer;
 use std::ops::{Deref, DerefMut, Index, IndexMut};
 
 pub struct Memory {
@@ -33,7 +32,7 @@ impl StackFrame {
         stack.sp = stack.sp + 16; //16 locals
         StackFrame {
             prev: Box::new(Some(self)),
-            pc: pc,
+            pc,
             bp: stack.sp,
         }
     }
