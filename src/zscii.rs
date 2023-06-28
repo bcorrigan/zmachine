@@ -3,14 +3,17 @@ use crate::memory::Memory;
 // See 3.5.3 @ https://www.inform-fiction.org/zmachine/standards/z1point1/sect03.html
 const ZSCII_MAP234: [[char; 32]; 3] = [
     [
+        //A0
         ' ', '\0', '\0', '\0', '\0', '\0', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k',
         'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z',
     ],
     [
+        //A1
         '\0', '\0', '\0', '\0', '\0', '\0', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K',
         'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z',
     ],
     [
+        //A2
         '\0', '\0', '\0', '\0', '\0', '\0', ' ', '\n', '0', '1', '2', '3', '4', '5', '6', '7', '8',
         '9', '.', ',', '!', '?', '_', '#', '\'', '"', '/', '\\', '-', ':', '(', ')',
     ],
@@ -18,14 +21,17 @@ const ZSCII_MAP234: [[char; 32]; 3] = [
 
 const ZSCII_MAP1: [[char; 32]; 3] = [
     [
+        //A0
         ' ', '\0', '\0', '\0', '\0', '\0', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k',
         'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z',
     ],
     [
+        //A1
         '\0', '\0', '\0', '\0', '\0', '\0', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K',
         'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z',
     ],
     [
+        //A2
         '\0', '\0', '\0', '\0', '\0', '\0', ' ', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
         '.', ',', '!', '?', '_', '#', '\'', '"', '/', '\\', '<', '-', ':', '(', ')',
     ],
@@ -69,13 +75,13 @@ impl<'a> Zscii<'a> {
             // dummy's guide:
             // 0x1f = 00011111 = extract last 5 bits. Of course, 3 = 0x11
             let byte1 = self.mem.read_u8(ptr);
-            self.ptr = self.ptr + 1;
+            self.ptr += 1;
             let byte2 = self.mem.read_u8(ptr);
-            self.ptr = self.ptr + 1;
+            self.ptr += 1;
 
-            self.append_zchar((byte1 >> 2) & 0x1f); //AAAAA
-            self.append_zchar((byte1 & 3u8) << 3 | (byte2 >> 5)); //BBBBB
-            self.append_zchar(byte2 & 0x1f); //CCCCC
+            self.process_zchar((byte1 >> 2) & 0x1f); //AAAAA
+            self.process_zchar((byte1 & 3u8) << 3 | (byte2 >> 5)); //BBBBB
+            self.process_zchar(byte2 & 0x1f); //CCCCC
 
             //check the X bit
             if (byte1 & 0x80) == 0 {
@@ -85,7 +91,7 @@ impl<'a> Zscii<'a> {
         "".to_owned()
     }
 
-    fn append_zchar(&mut self, ch: u8) {
+    fn process_zchar(&mut self, ch: u8) {
         match (self.mode) {
             Mode::A0 => {}
             Mode::A1 => {}
