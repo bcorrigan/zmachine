@@ -146,11 +146,11 @@ impl Memory {
         }
     }
 
-    fn high_memory(&self) -> u16 {
+    pub fn high_memory(&self) -> u16 {
         self.read_u16(0x04)
     }
 
-    fn static_memory(&self) -> u16 {
+    pub fn static_memory(&self) -> u16 {
         self.read_u16(0x0E)
     }
 
@@ -158,35 +158,35 @@ impl Memory {
         self.read_u16(0x0A)
     }
 
-    fn dictionary(&self) -> u16 {
+    pub fn dictionary(&self) -> u16 {
         self.read_u16(0x08)
     }
 
-    fn global_variables(&self) -> u16 {
+    pub fn global_variables(&self) -> u16 {
         self.read_u16(0x0C)
     }
 
-    fn character_table(&self) -> u16 {
+    pub fn character_table(&self) -> u16 {
         self.read_u16(0x2E)
     }
 
-    fn alphabet_table(&self) -> u16 {
+    pub fn alphabet_table(&self) -> u16 {
         self.read_u16(0x34) //"or zero for default"
     }
 
-    fn abbreviations_table(&self) -> u16 {
+    pub fn abbreviations_table(&self) -> u16 {
         self.read_u16(0x18)
     }
 
-    fn header_extension_table(&self) -> u16 {
+    pub fn header_extension_table(&self) -> u16 {
         self.read_u16(0x36)
     }
 
-    fn routine_offset(&self) -> u16 {
+    pub fn routine_offset(&self) -> u16 {
         self.read_u16(0x28)
     }
 
-    fn string_offset(&self) -> u16 {
+    pub fn string_offset(&self) -> u16 {
         self.read_u16(0x2A)
     }
 

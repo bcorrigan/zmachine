@@ -43,7 +43,7 @@ enum Mode {
     A2,
     ABBREV(u8),
     ZCODE1,
-    ZCODE2,
+    ZCODE2(u8),
 }
 
 pub struct Zscii<'a> {
@@ -88,23 +88,23 @@ impl<'a> Zscii<'a> {
                 break;
             }
         }
-        "".to_owned()
+        self.buf.iter().collect()
     }
 
     fn process_zchar(&mut self, ch: u8) {
         match self.mode {
             Mode::A0 => match ch {
-                1 => self.mode = Mode::ABBREV(1),
-                2 => self.mode = Mode::ABBREV(2),
-                3 => self.mode = Mode::ABBREV(3),
+                1 => self.mode = Mode::ABBREV(0),
+                2 => self.mode = Mode::ABBREV(1),
+                3 => self.mode = Mode::ABBREV(2),
                 4 => self.mode = Mode::A1,
                 5 => self.mode = Mode::A2,
                 _ => self.buf.push(ZSCII_MAP234[0][ch as usize]),
             },
             Mode::A1 => match ch {
-                1 => self.mode = Mode::ABBREV(1),
-                2 => self.mode = Mode::ABBREV(2),
-                3 => self.mode = Mode::ABBREV(3),
+                1 => self.mode = Mode::ABBREV(0),
+                2 => self.mode = Mode::ABBREV(1),
+                3 => self.mode = Mode::ABBREV(2),
                 4 => self.mode = Mode::A1,
                 5 => self.mode = Mode::A2,
                 _ => {
@@ -113,9 +113,9 @@ impl<'a> Zscii<'a> {
                 }
             },
             Mode::A2 => match ch {
-                1 => self.mode = Mode::ABBREV(1),
-                2 => self.mode = Mode::ABBREV(2),
-                3 => self.mode = Mode::ABBREV(3),
+                1 => self.mode = Mode::ABBREV(0),
+                2 => self.mode = Mode::ABBREV(1),
+                3 => self.mode = Mode::ABBREV(2),
                 4 => self.mode = Mode::A1,
                 5 => self.mode = Mode::A2,
                 6 => self.mode = Mode::ZCODE1,
@@ -124,9 +124,23 @@ impl<'a> Zscii<'a> {
                     self.mode = Mode::A0;
                 }
             },
-            Mode::ABBREV(n) => {}
-            Mode::ZCODE1 => {}
-            Mode::ZCODE2 => {}
+            Mode::ABBREV(table) => {
+                let abbrev = table * 32 + ch;
+                let mut zscii = Zscii::new(self.mem);
+                let str = zscii.get_string(
+                    self.mem
+                        .read_u16(self.mem.abbreviations_table() + (2 * abbrev as u16)),
+                );
+                let mut abbrev_vec: Vec<char> = str.chars().collect::<Vec<_>>();
+                self.buf.append(&mut abbrev_vec);
+            }
+            Mode::ZCODE1 => self.mode = Mode::ZCODE2(ch),
+            Mode::ZCODE2(code1) => {
+                let code: [u16; 1] = [ch as u16 | (code1 as u16) << 5];
+                let mut char: Vec<char> =
+                    char::decode_utf16(code).map(|r| r.unwrap_or(' ')).collect();
+                self.buf.append(&mut char);
+            }
         }
     }
 }
