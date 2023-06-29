@@ -1,4 +1,4 @@
-use crate::memory::Memory;
+use crate::{memory::Memory, zscii};
 //use core::num::traits::Num;
 //use core::num::Num;
 use num::Integer;
@@ -165,10 +165,12 @@ where
         self.write_parent(obj, dest_obj);
     }
 
-    fn print(&mut self, obj: T) {
+    fn get_string(&mut self, obj: T) -> Option<String> {
         if self.mem.read_u8(self.props(obj)) != 0 {
-            //ZSCII(obj+1)
-            //print(zscii_buf,zscii_ptr);
+            let mut zscii = zscii::Zscii::new(self.mem);
+            Some(zscii.get_string(self.props(obj) + 1))
+        } else {
+            None
         }
     }
 }
