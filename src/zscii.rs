@@ -37,6 +37,7 @@ const ZSCII_MAP1: [[char; 32]; 3] = [
     ],
 ];
 
+#[derive(Copy, Clone)]
 enum Mode {
     A0,
     A1,
@@ -50,7 +51,7 @@ pub struct Zscii<'a> {
     ptr: u16,
     mode: Mode,
     buf: Vec<char>,
-    shiftMode: Option<Mode>,
+    shift_mode: Option<Mode>,
     mem: &'a Memory,
 }
 
@@ -60,7 +61,7 @@ impl<'a> Zscii<'a> {
             ptr: 0u16,
             mode: Mode::A0,
             buf: vec![],
-            shifted: false,
+            shift_mode: None,
             mem,
         }
     }
@@ -113,19 +114,22 @@ impl<'a> Zscii<'a> {
                 }
                 4 => {
                     if self.mem.zmachine_version() < 3 {
-                        self.shifted = true;
+                        self.shift_mode = Some(Mode::A1);
                     }
                     Mode::A1
                 }
                 5 => {
                     if self.mem.zmachine_version() < 3 {
-                        self.shifted = true;
+                        self.shift_mode = Some(Mode::A2);
                     }
                     Mode::A2
                 }
                 _ => {
                     self.buf.push(self.zscii_lookup(ch, 0));
-                    Mode::A0
+                    match self.shift_mode {
+                        Some(mode) => mode,
+                        None => Mode::A0,
+                    }
                 }
             },
             Mode::A1 => match ch {
@@ -146,7 +150,7 @@ impl<'a> Zscii<'a> {
                 }
                 4 => {
                     if self.mem.zmachine_version() < 3 {
-                        self.shifted = true;
+                        self.shift_mode = Some(Mode::A2);
                         Mode::A2
                     } else {
                         Mode::A1
@@ -154,7 +158,7 @@ impl<'a> Zscii<'a> {
                 }
                 5 => {
                     if self.mem.zmachine_version() < 3 {
-                        self.shifted = true;
+                        self.shift_mode = Some(Mode::A0);
                         Mode::A0
                     } else {
                         Mode::A2
@@ -162,10 +166,9 @@ impl<'a> Zscii<'a> {
                 }
                 _ => {
                     self.buf.push(self.zscii_lookup(ch, 1));
-                    if !self.shifted {
-                        Mode::A0
-                    } else {
-                        Mode::A1
+                    match self.shift_mode {
+                        Some(mode) => mode,
+                        None => Mode::A0,
                     }
                 }
             },
@@ -187,7 +190,7 @@ impl<'a> Zscii<'a> {
                 }
                 4 => {
                     if self.mem.zmachine_version() < 3 {
-                        self.shifted = true;
+                        self.shift_mode = Some(Mode::A0);
                         Mode::A0
                     } else {
                         Mode::A1
@@ -195,7 +198,7 @@ impl<'a> Zscii<'a> {
                 }
                 5 => {
                     if self.mem.zmachine_version() < 3 {
-                        self.shifted = true;
+                        self.shift_mode = Some(Mode::A1);
                         Mode::A1
                     } else {
                         Mode::A2
