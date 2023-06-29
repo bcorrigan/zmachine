@@ -41,7 +41,7 @@ enum Mode {
     A0,
     A1,
     A2,
-    ABBREV,
+    ABBREV(u8),
     ZCODE1,
     ZCODE2,
 }
@@ -92,11 +92,39 @@ impl<'a> Zscii<'a> {
     }
 
     fn process_zchar(&mut self, ch: u8) {
-        match (self.mode) {
-            Mode::A0 => {}
-            Mode::A1 => {}
-            Mode::A2 => {}
-            Mode::ABBREV => {}
+        match self.mode {
+            Mode::A0 => match ch {
+                1 => self.mode = Mode::ABBREV(1),
+                2 => self.mode = Mode::ABBREV(2),
+                3 => self.mode = Mode::ABBREV(3),
+                4 => self.mode = Mode::A1,
+                5 => self.mode = Mode::A2,
+                _ => self.buf.push(ZSCII_MAP234[0][ch as usize]),
+            },
+            Mode::A1 => match ch {
+                1 => self.mode = Mode::ABBREV(1),
+                2 => self.mode = Mode::ABBREV(2),
+                3 => self.mode = Mode::ABBREV(3),
+                4 => self.mode = Mode::A1,
+                5 => self.mode = Mode::A2,
+                _ => {
+                    self.buf.push(ZSCII_MAP234[1][ch as usize]);
+                    self.mode = Mode::A0;
+                }
+            },
+            Mode::A2 => match ch {
+                1 => self.mode = Mode::ABBREV(1),
+                2 => self.mode = Mode::ABBREV(2),
+                3 => self.mode = Mode::ABBREV(3),
+                4 => self.mode = Mode::A1,
+                5 => self.mode = Mode::A2,
+                6 => self.mode = Mode::ZCODE1,
+                _ => {
+                    self.buf.push(ZSCII_MAP234[2][ch as usize]);
+                    self.mode = Mode::A0;
+                }
+            },
+            Mode::ABBREV(n) => {}
             Mode::ZCODE1 => {}
             Mode::ZCODE2 => {}
         }
