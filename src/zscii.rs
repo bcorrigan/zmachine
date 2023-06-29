@@ -79,9 +79,9 @@ impl<'a> Zscii<'a> {
             let byte2 = self.mem.read_u8(ptr);
             self.ptr += 1;
 
-            self.process_zchar((byte1 >> 2) & 0x1f); //AAAAA
-            self.process_zchar((byte1 & 3u8) << 3 | (byte2 >> 5)); //BBBBB
-            self.process_zchar(byte2 & 0x1f); //CCCCC
+            self.decode_zchar((byte1 >> 2) & 0x1f); //AAAAA
+            self.decode_zchar((byte1 & 3u8) << 3 | (byte2 >> 5)); //BBBBB
+            self.decode_zchar(byte2 & 0x1f); //CCCCC
 
             //check the X bit
             if (byte1 & 0x80) == 0 {
@@ -91,7 +91,7 @@ impl<'a> Zscii<'a> {
         self.buf.iter().collect()
     }
 
-    fn process_zchar(&mut self, ch: u8) {
+    fn decode_zchar(&mut self, ch: u8) {
         match self.mode {
             Mode::A0 => match ch {
                 1 => self.mode = Mode::ABBREV(0),
@@ -99,7 +99,7 @@ impl<'a> Zscii<'a> {
                 3 => self.mode = Mode::ABBREV(2),
                 4 => self.mode = Mode::A1,
                 5 => self.mode = Mode::A2,
-                _ => self.buf.push(ZSCII_MAP234[0][ch as usize]),
+                _ => self.buf.push(self.zscii_lookup(ch, 0)),
             },
             Mode::A1 => match ch {
                 1 => self.mode = Mode::ABBREV(0),
@@ -108,7 +108,7 @@ impl<'a> Zscii<'a> {
                 4 => self.mode = Mode::A1,
                 5 => self.mode = Mode::A2,
                 _ => {
-                    self.buf.push(ZSCII_MAP234[1][ch as usize]);
+                    self.buf.push(self.zscii_lookup(ch, 1));
                     self.mode = Mode::A0;
                 }
             },
@@ -120,7 +120,7 @@ impl<'a> Zscii<'a> {
                 5 => self.mode = Mode::A2,
                 6 => self.mode = Mode::ZCODE1,
                 _ => {
-                    self.buf.push(ZSCII_MAP234[2][ch as usize]);
+                    self.buf.push(self.zscii_lookup(ch, 2));
                     self.mode = Mode::A0;
                 }
             },
@@ -143,6 +143,14 @@ impl<'a> Zscii<'a> {
                 self.buf.append(&mut char);
                 self.mode = Mode::A0;
             }
+        }
+    }
+
+    fn zscii_lookup(&self, ch: u8, mode: usize) -> char {
+        if self.mem.zmachine_version() == 1 {
+            ZSCII_MAP1[mode][ch as usize]
+        } else {
+            ZSCII_MAP234[mode][ch as usize]
         }
     }
 }
