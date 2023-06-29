@@ -133,6 +133,7 @@ impl<'a> Zscii<'a> {
                 );
                 let mut abbrev_vec: Vec<char> = str.chars().collect::<Vec<_>>();
                 self.buf.append(&mut abbrev_vec);
+                self.mode = Mode::A0;
             }
             Mode::ZCODE1 => self.mode = Mode::ZCODE2(ch),
             Mode::ZCODE2(code1) => {
@@ -140,6 +141,7 @@ impl<'a> Zscii<'a> {
                 let mut char: Vec<char> =
                     char::decode_utf16(code).map(|r| r.unwrap_or(' ')).collect();
                 self.buf.append(&mut char);
+                self.mode = Mode::A0;
             }
         }
     }
