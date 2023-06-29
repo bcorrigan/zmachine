@@ -50,6 +50,7 @@ pub struct Zscii<'a> {
     ptr: u16,
     mode: Mode,
     buf: Vec<char>,
+    shiftMode: Option<Mode>,
     mem: &'a Memory,
 }
 
@@ -59,7 +60,8 @@ impl<'a> Zscii<'a> {
             ptr: 0u16,
             mode: Mode::A0,
             buf: vec![],
-            mem: mem,
+            shifted: false,
+            mem,
         }
     }
 
@@ -92,36 +94,117 @@ impl<'a> Zscii<'a> {
     }
 
     fn decode_zchar(&mut self, ch: u8) {
-        match self.mode {
+        self.mode = match self.mode {
             Mode::A0 => match ch {
-                1 => self.mode = Mode::ABBREV(0),
-                2 => self.mode = Mode::ABBREV(1),
-                3 => self.mode = Mode::ABBREV(2),
-                4 => self.mode = Mode::A1,
-                5 => self.mode = Mode::A2,
-                _ => self.buf.push(self.zscii_lookup(ch, 0)),
+                1 => Mode::ABBREV(0),
+                2 => {
+                    if self.mem.zmachine_version() < 3 {
+                        Mode::A1
+                    } else {
+                        Mode::ABBREV(1)
+                    }
+                }
+                3 => {
+                    if self.mem.zmachine_version() < 3 {
+                        Mode::A2
+                    } else {
+                        Mode::ABBREV(2)
+                    }
+                }
+                4 => {
+                    if self.mem.zmachine_version() < 3 {
+                        self.shifted = true;
+                    }
+                    Mode::A1
+                }
+                5 => {
+                    if self.mem.zmachine_version() < 3 {
+                        self.shifted = true;
+                    }
+                    Mode::A2
+                }
+                _ => {
+                    self.buf.push(self.zscii_lookup(ch, 0));
+                    Mode::A0
+                }
             },
             Mode::A1 => match ch {
-                1 => self.mode = Mode::ABBREV(0),
-                2 => self.mode = Mode::ABBREV(1),
-                3 => self.mode = Mode::ABBREV(2),
-                4 => self.mode = Mode::A1,
-                5 => self.mode = Mode::A2,
+                1 => Mode::ABBREV(0),
+                2 => {
+                    if self.mem.zmachine_version() < 3 {
+                        Mode::A2
+                    } else {
+                        Mode::ABBREV(1)
+                    }
+                }
+                3 => {
+                    if self.mem.zmachine_version() < 3 {
+                        Mode::A0
+                    } else {
+                        Mode::ABBREV(2)
+                    }
+                }
+                4 => {
+                    if self.mem.zmachine_version() < 3 {
+                        self.shifted = true;
+                        Mode::A2
+                    } else {
+                        Mode::A1
+                    }
+                }
+                5 => {
+                    if self.mem.zmachine_version() < 3 {
+                        self.shifted = true;
+                        Mode::A0
+                    } else {
+                        Mode::A2
+                    }
+                }
                 _ => {
                     self.buf.push(self.zscii_lookup(ch, 1));
-                    self.mode = Mode::A0;
+                    if !self.shifted {
+                        Mode::A0
+                    } else {
+                        Mode::A1
+                    }
                 }
             },
             Mode::A2 => match ch {
-                1 => self.mode = Mode::ABBREV(0),
-                2 => self.mode = Mode::ABBREV(1),
-                3 => self.mode = Mode::ABBREV(2),
-                4 => self.mode = Mode::A1,
-                5 => self.mode = Mode::A2,
-                6 => self.mode = Mode::ZCODE1,
+                1 => Mode::ABBREV(0),
+                2 => {
+                    if self.mem.zmachine_version() < 3 {
+                        Mode::A0
+                    } else {
+                        Mode::ABBREV(1)
+                    }
+                }
+                3 => {
+                    if self.mem.zmachine_version() < 3 {
+                        Mode::A1
+                    } else {
+                        Mode::ABBREV(2)
+                    }
+                }
+                4 => {
+                    if self.mem.zmachine_version() < 3 {
+                        self.shifted = true;
+                        Mode::A0
+                    } else {
+                        Mode::A1
+                    }
+                }
+                5 => {
+                    if self.mem.zmachine_version() < 3 {
+                        self.shifted = true;
+                        Mode::A1
+                    } else {
+                        Mode::A2
+                    }
+                }
+                6 => Mode::ZCODE1,
                 _ => {
                     self.buf.push(self.zscii_lookup(ch, 2));
-                    self.mode = Mode::A0;
+                    Mode::A0
                 }
             },
             Mode::ABBREV(table) => {
@@ -133,15 +216,15 @@ impl<'a> Zscii<'a> {
                 );
                 let mut abbrev_vec: Vec<char> = str.chars().collect::<Vec<_>>();
                 self.buf.append(&mut abbrev_vec);
-                self.mode = Mode::A0;
+                Mode::A0
             }
-            Mode::ZCODE1 => self.mode = Mode::ZCODE2(ch),
+            Mode::ZCODE1 => Mode::ZCODE2(ch),
             Mode::ZCODE2(code1) => {
                 let code: [u16; 1] = [ch as u16 | (code1 as u16) << 5];
                 let mut char: Vec<char> =
                     char::decode_utf16(code).map(|r| r.unwrap_or(' ')).collect();
                 self.buf.append(&mut char);
-                self.mode = Mode::A0;
+                Mode::A0
             }
         }
     }
