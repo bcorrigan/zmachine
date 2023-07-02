@@ -165,12 +165,19 @@ where
         self.write_parent(obj, dest_obj);
     }
 
-    fn get_string(&mut self, obj: T) -> Option<String> {
+    //print
+
+    fn name(&mut self, obj: T) -> Option<String> {
         if self.mem.read_u8(self.props(obj)) != 0 {
             let mut zscii = zscii::Zscii::new(self.mem);
             Some(zscii.get_string(self.props(obj) + 1))
         } else {
             None
         }
+    }
+
+    fn status(&self) -> u16 {
+        self.mem
+            .read_u16(self.object_ptr(T::from(self.mem.read_global(16))))
     }
 }

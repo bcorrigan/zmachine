@@ -129,7 +129,7 @@ impl Memory {
         self[addr] = vals[1];
     }
 
-    fn load(&mut self, id: u8, frame: &mut StackFrame) -> Result<u16, Error> {
+    pub fn load(&mut self, id: u8, frame: &mut StackFrame) -> Result<u16, Error> {
         match id {
             0x00 => {
                 //pop from stack
@@ -141,9 +141,13 @@ impl Memory {
             }
             _ => {
                 //read from globals
-                Ok(self.read_u16(self.global_variables() + (id * 2) as u16))
+                Ok(self.read_global(id))
             }
         }
+    }
+
+    pub fn read_global(&self, id: u8) -> u16 {
+        self.read_u16(self.global_variables() + (id * 2) as u16)
     }
 
     pub fn high_memory(&self) -> u16 {
