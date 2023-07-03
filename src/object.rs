@@ -37,7 +37,7 @@ impl ReadObject for u16 {
 
 impl<'a, T> Object<'_, T>
 where
-    T: Integer + Into<u8> + Into<u16> + Copy + ReadObject,
+    T: Integer + Into<u8> + Into<u16> + Copy + ReadObject + From<u16>,
 {
     const PARENT: u16 = 4;
     const SIBLING: u16 = 5;
