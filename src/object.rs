@@ -2,6 +2,7 @@ use crate::{memory::Memory, zscii};
 //use core::num::traits::Num;
 //use core::num::Num;
 use num::Integer;
+use std::any::TypeId;
 use std::marker::PhantomData;
 
 /*
@@ -39,13 +40,19 @@ impl<'a, T> Object<'_, T>
 where
     T: Integer + Into<u8> + Into<u16> + Copy + ReadObject + From<u16>,
 {
-    const PARENT: u16 = 4;
-    const SIBLING: u16 = 5;
-    const CHILD: u16 = 6;
-    const PROPS: u16 = 7;
-    const SIZE: u16 = 9;
+    const WIDE: bool = std::mem::size_of::<T>() == 2;
 
-    const PROPMAX: u16 = 31;
+    const C: () = assert!(
+        std::mem::size_of::<T>() < 3,
+        "ZObjects can only be width u8 or u16"
+    );
+    const PARENT: u16 = if Object::<T>::WIDE { 6 } else { 4 };
+    const SIBLING: u16 = if Object::<T>::WIDE { 8 } else { 5 };
+    const CHILD: u16 = if Object::<T>::WIDE { 10 } else { 6 };
+    const PROPS: u16 = if Object::<T>::WIDE { 12 } else { 7 };
+    const SIZE: u16 = if Object::<T>::WIDE { 14 } else { 9 };
+
+    const PROPMAX: u16 = if Object::<T>::WIDE { 63 } else { 31 };
 
     fn object_table_ptr(&self) -> u16 {
         self.mem.object_table() + Object::<T>::PROPMAX * 2 - Object::<T>::SIZE
@@ -179,5 +186,35 @@ where
     fn status(&self) -> u16 {
         self.mem
             .read_u16(self.object_ptr(T::from(self.mem.read_global(16))))
+    }
+
+    //The property number occupies the bottom 6 bits of the first size byte.
+    fn get_prop_len(&self, addr: u16) -> u8 {
+        //see sections 12.4.2.1.1 - 12.4.2.2 in standards doc:
+        //If the top bit (bit 7) of the first size byte is clear, then there is only one size-and-number byte.
+        //Bits 0 to 5 contain the property number; bit 6 is either clear to indicate a property data length of 1,
+        //or set to indicate a length of 2; bit 7 is clear.
+        if addr == 0 {
+            0
+        } else if Object::<T>::WIDE {
+            let sz = self.mem.read_u8(addr - 1);
+            if sz == 0 {
+                if sz & 0x40 == 0 {
+                    1
+                } else {
+                    2
+                }
+            } else {
+                if sz & 0x3F == 0 {
+                    //if first 6 bits 111111 are all 0
+                    //From stds doc: A value of 0 as property data length (in the second byte) should be interpreted as a length of 64
+                    64
+                } else {
+                    sz
+                }
+            }
+        } else {
+            (self.mem.read_u8(addr - 1) >> 5) + 1
+        }
     }
 }
