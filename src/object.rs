@@ -216,4 +216,39 @@ where
             (self.mem.read_u8(addr - 1) >> 5) + 1
         }
     }
+
+    //returns address to the property *value* not the size byte
+    fn get_prop_addr(&self, obj: T, prop_id: u8) -> u16 {
+        let top_prop_table_addr = self.props(obj);
+        //skip name to first property
+        let mut property_addr =
+            top_prop_table_addr + self.mem.read_u8(top_prop_table_addr) as u16 * 2 + 1;
+        if Object::<T>::WIDE {
+            loop {
+                let size = self.mem.read_u8(property_addr);
+                let id = size & 0x3f; //Bits 0 to 5 contain the property number
+                if size == 0 {
+                    break;
+                }
+                if id == prop_id {
+                    if size & 0x80 == 0 {
+                        // bit 6 is either clear to indicate a property data length of 1, or set to indicate a length of 2
+                        return property_addr + 1;
+                    }
+                }
+            }
+            return 0;
+        } else {
+            //scan each property for prop_id
+            while self.mem.read_u8(property_addr) != 0 {
+                let size = self.mem.read_u8(property_addr);
+                if size & 0x1f == prop_id {
+                    return property_addr + 1;
+                } else {
+                    property_addr += (size >> 5) as u16 + 2;
+                }
+            }
+            return 0;
+        }
+    }
 }
