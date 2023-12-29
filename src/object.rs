@@ -35,6 +35,12 @@ impl ReadObject for u16 {
     }
 }
 
+struct PropAddr {
+    addr: u16,
+    size_bytes: u8,
+    data_length: u8,
+}
+
 impl<'a, T> Object<'_, T>
 where
     T: Integer + Into<u8> + Into<u16> + Copy + ReadObject + From<u16>,
@@ -218,7 +224,7 @@ where
     }
 
     //returns address to the property *value* not the size byte
-    fn get_prop_addr(&self, obj: T, prop_id: u8) -> u16 {
+    fn get_prop_addr(&self, obj: T, prop_id: u8) -> PropAddr {
         let top_prop_table_addr = self.props(obj);
         //skip name to first property
         let mut property_addr =
@@ -231,24 +237,64 @@ where
                     break;
                 }
                 if id == prop_id {
+                    //bit 7 0x80 indicates if there's one size-and-number byte or two
                     if size & 0x80 == 0 {
-                        // bit 6 is either clear to indicate a property data length of 1, or set to indicate a length of 2
-                        return property_addr + 1;
+                        // bit 6 - 0x40 -  is either clear to indicate a property data length of 1, or set to indicate a length of 2
+                        return PropAddr {
+                            addr: property_addr + 1,
+                            size_bytes: 1,
+                            data_length: if size & 0x40 == 0 { 1 } else { 2 },
+                        };
+                    } else {
+                        return PropAddr {
+                            addr: property_addr + 2,
+                            size_bytes: 2,
+                            data_length: if size & 0x40 == 0 { 1 } else { 2 },
+                        };
+                    }
+                } else {
+                    if size & 0x80 == 0 {
+                        if size & 0x40 == 0 {
+                            //one size & number byte, prop data length 1
+                            property_addr += 2; //1 hdr , 1 data
+                        } else {
+                            //one size & number bytes, data length 2
+                            property_addr += 3; //1 hdr, 2 data
+                        }
+                    } else {
+                        let next_id = self.mem.read_u8(property_addr + 1) & 0x3f;
+                        if next_id == 0 {
+                            property_addr += 64 + 2;
+                        } else {
+                            property_addr += next_id as u16 + 2;
+                        }
                     }
                 }
             }
-            return 0;
+            return PropAddr {
+                addr: 0,
+                size_bytes: 1,
+                data_length: 1,
+            };
         } else {
             //scan each property for prop_id
             while self.mem.read_u8(property_addr) != 0 {
                 let size = self.mem.read_u8(property_addr);
                 if size & 0x1f == prop_id {
-                    return property_addr + 1;
+                    return PropAddr {
+                        addr: property_addr + 1,
+                        size_bytes: 1,
+                        data_length: 1,
+                    };
                 } else {
                     property_addr += (size >> 5) as u16 + 2;
                 }
             }
-            return 0;
+            return PropAddr {
+                addr: 0,
+                size_bytes: 1,
+                data_length: 1,
+            };
         }
     }
 }
