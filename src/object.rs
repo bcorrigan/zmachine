@@ -297,4 +297,21 @@ where
             };
         }
     }
+
+    fn get_prop_next(&self, obj: T, prop_id: u8) -> u16 {
+        let top_prop_table_addr = self.props(obj);
+        //skip name to first property
+        let mut property_addr =
+            top_prop_table_addr + self.mem.read_u8(top_prop_table_addr) as u16 * 2 + 1;
+        if Object::<T>::WIDE {
+            0
+        } else {
+            if prop_id == 0 {
+                //return first prop, bits 0-4
+                return (self.mem.read_u8(property_addr) & 0x1f) as u16;
+            } else {
+                0
+            }
+        }
+    }
 }
