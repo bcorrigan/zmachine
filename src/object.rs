@@ -298,7 +298,7 @@ where
         }
     }
 
-    fn get_prop_next(&self, obj: T, prop_id: u8) -> u16 {
+    fn get_prop_next(&self, obj: T, prop_id: u8) -> u8 {
         let top_prop_table_addr = self.props(obj);
         //skip name to first property
         let mut property_addr =
@@ -308,9 +308,17 @@ where
         } else {
             if prop_id == 0 {
                 //return first prop, bits 0-4
-                return (self.mem.read_u8(property_addr) & 0x1f) as u16;
+                return self.mem.read_u8(property_addr) & 0x1f;
             } else {
-                0
+                while self.mem.read_u8(property_addr) != 0 {
+                    let size = self.mem.read_u8(property_addr);
+                    if size & 0x1f == prop_id {
+                        return self.mem.read_u8(property_addr + (size >> 5) as u16 + 2) & 0x1f;
+                    } else {
+                        property_addr += (size >> 5) as u16 + 2;
+                    }
+                }
+                return 0;
             }
         }
     }
