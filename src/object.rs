@@ -345,4 +345,11 @@ where
             }
         }
     }
+
+    fn get_prop(self, obj: T, prop_id: u8) -> u16 {
+        let prop_addr = self.get_prop_addr(obj, prop_id);
+        if prop_addr.addr == 0 {
+            return self.mem.read_u16(); //tbd default_prop_ptr
+        }
+    }
 }
