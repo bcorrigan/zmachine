@@ -304,7 +304,30 @@ where
         let mut property_addr =
             top_prop_table_addr + self.mem.read_u8(top_prop_table_addr) as u16 * 2 + 1;
         if Object::<T>::WIDE {
-            0
+            if prop_id == 0 {
+                return (self.mem.read_u8(property_addr) * 2 + 1) & 0x3f;
+            } else {
+                let propaddr = self.get_prop_addr(obj, prop_id);
+                let mut addr = propaddr.addr;
+                if propaddr.size_bytes & 0x80 == 0 {
+                    //prop data length 1
+                    if propaddr.size_bytes & 0x40 == 0 {
+                        //one size & number byte
+                        addr += 1;
+                    } else {
+                        //two size & number bytes
+                        addr += 2;
+                    }
+                } else {
+                    let size = self.mem.read_u8(addr - 1) & 0x3f;
+                    if size == 0 {
+                        addr += 64;
+                    } else {
+                        addr += size as u16;
+                    }
+                }
+                return self.mem.read_u8(addr) & 0x3f;
+            }
         } else {
             if prop_id == 0 {
                 //return first prop, bits 0-4
