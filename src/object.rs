@@ -348,21 +348,41 @@ where
 
     fn get_prop(self, obj: T, prop_id: u8) -> u16 {
         let prop_addr = self.get_prop_addr(obj, prop_id);
-        if prop_addr.addr == 0 {
-            //subtract 2 so we can do 1-based indexing/access
-            let prop_ptr = self.mem.object_table() - 2;
-            return self.mem.read_u16(prop_ptr + (prop_id * 2) as u16); //tbd default_prop_ptr
-        } else {
-            if prop_addr.size_bytes & 0x80 == 0 {
-                if prop_addr.size_bytes & 0x40 == 0 {
-                    return self.mem.read_u8(prop_addr.addr) as u16;
-                } else {
-                    return self.mem.read_u16(prop_addr.addr);
-                }
+        if Object::<T>::WIDE {
+            if prop_addr.addr == 0 {
+                //subtract 2 so we can do 1-based indexing/access
+                let prop_ptr = self.mem.object_table() - 2;
+                return self.mem.read_u16(prop_ptr + (prop_id * 2) as u16); //tbd default_prop_ptr
             } else {
-                //DIE as property not byte or word sized - tbd error handling
-                return 0;
+                if prop_addr.size_bytes & 0x80 == 0 {
+                    if prop_addr.size_bytes & 0x40 == 0 {
+                        return self.mem.read_u8(prop_addr.addr) as u16;
+                    } else {
+                        return self.mem.read_u16(prop_addr.addr);
+                    }
+                } else {
+                    //DIE as property not byte or word sized - TODO error handling
+                    return 0;
+                }
             }
+        } else {
+            let mut addr = prop_addr.addr;
+            while self.mem.read_u8(addr) != 0 {
+                let size = self.mem.read_u8(addr);
+                if size & 0x1f == prop_id {
+                    match size >> 5 {
+                        0 => return self.mem.read_u8(addr + 1) as u16,
+                        1 => return self.mem.read_u16(addr + 1),
+                        _ => {} //TODO die
+                    }
+                } else {
+                    addr += (size >> 5 + 2) as u16;
+                }
+            }
+
+            return self
+                .mem
+                .read_u16((self.mem.object_table() - 2) + prop_id as u16 * 2);
         }
     }
 }
