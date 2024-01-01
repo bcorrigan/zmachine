@@ -349,7 +349,20 @@ where
     fn get_prop(self, obj: T, prop_id: u8) -> u16 {
         let prop_addr = self.get_prop_addr(obj, prop_id);
         if prop_addr.addr == 0 {
-            return self.mem.read_u16(); //tbd default_prop_ptr
+            //subtract 2 so we can do 1-based indexing/access
+            let prop_ptr = self.mem.object_table() - 2;
+            return self.mem.read_u16(prop_ptr + (prop_id * 2) as u16); //tbd default_prop_ptr
+        } else {
+            if prop_addr.size_bytes & 0x80 == 0 {
+                if prop_addr.size_bytes & 0x40 == 0 {
+                    return self.mem.read_u8(prop_addr.addr) as u16;
+                } else {
+                    return self.mem.read_u16(prop_addr.addr);
+                }
+            } else {
+                //DIE as property not byte or word sized - tbd error handling
+                return 0;
+            }
         }
     }
 }
