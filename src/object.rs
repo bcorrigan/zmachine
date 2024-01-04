@@ -385,4 +385,35 @@ where
                 .read_u16((self.mem.object_table() - 2) + prop_id as u16 * 2);
         }
     }
+
+    fn put_prop(self, obj: T, prop_id: u8, val: u16) {
+        let prop_addr = self.get_prop_addr(obj, prop_id);
+        if Object::<T>::WIDE {
+            if prop_addr.addr == 0 {
+                //TODO DIE
+            }
+            if prop_addr.size_bytes & 0x80 == 0 {
+                if prop_addr.size_bytes & 0x40 == 0 {
+                    self.mem.write_u8(prop_addr.addr, val as u8);
+                } else {
+                    self.mem.write_u16(prop_addr.addr, val);
+                }
+            }
+        } else {
+            let mut property_addr =
+                self.props(obj) + self.mem.read_u8(self.props(obj)) as u16 * 2 + 1;
+            while self.mem.read_u8(property_addr) != 0 {
+                let size = self.mem.read_u8(property_addr);
+                if size & 0x1f == prop_id {
+                    match size >> 5 {
+                        0 => return self.mem.write_u8(property_addr + 1, val as u8),
+                        1 => return self.mem.write_u16(property_addr + 1, val),
+                        _ => {} //DIE
+                    }
+                } else {
+                    property_addr += ((size >> 5) + 2) as u16;
+                }
+            }
+        }
+    }
 }
