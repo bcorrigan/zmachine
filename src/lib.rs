@@ -2,7 +2,9 @@
 mod error;
 mod memory;
 mod object;
+mod zmachine;
 mod zscii;
+mod zscreen;
 
 #[cfg(test)]
 mod tests {
