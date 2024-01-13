@@ -17,7 +17,10 @@ where
     phantom: PhantomData<&'a T>,
 }
 
-trait ZObject {
+trait ZObject
+where
+    u16: From<<Self as ZObject>::Width>,
+{
     type Width;
     const PARENT: u16;
     const SIBLING: u16;
@@ -25,6 +28,16 @@ trait ZObject {
     const PROPS: u16;
     const SIZE: u16;
     const PROPMAX: u16;
+
+    fn mem(&self) -> &Memory;
+
+    fn object_table_ptr(&self) -> u16 {
+        self.mem().object_table() + Self::PROPMAX * 2 - Self::SIZE
+    }
+
+    fn object_ptr(&self, obj: Self::Width) -> u16 {
+        self.object_table_ptr() + (Into::<u16>::into(obj) * Self::SIZE)
+    }
 }
 
 trait ReadObject {
