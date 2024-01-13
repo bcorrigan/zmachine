@@ -17,6 +17,16 @@ where
     phantom: PhantomData<&'a T>,
 }
 
+trait ZObject {
+    type Width;
+    const PARENT: u16;
+    const SIBLING: u16;
+    const CHILD: u16;
+    const PROPS: u16;
+    const SIZE: u16;
+    const PROPMAX: u16;
+}
+
 trait ReadObject {
     fn read_obj(&self, addr: u16, mem: &Memory) -> Self
     where
