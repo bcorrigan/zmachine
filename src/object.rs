@@ -20,6 +20,8 @@ where
 trait ZObject
 where
     u16: From<<Self as ZObject>::Width>,
+    u8: From<<Self as ZObject>::Width>,
+    Self::Width: Copy,
 {
     type Width;
     const PARENT: u16;
@@ -30,6 +32,7 @@ where
     const PROPMAX: u16;
 
     fn mem(&self) -> &Memory;
+    fn mut_mem(&self) -> &mut Memory;
 
     fn object_table_ptr(&self) -> u16 {
         self.mem().object_table() + Self::PROPMAX * 2 - Self::SIZE
@@ -37,6 +40,54 @@ where
 
     fn object_ptr(&self, obj: Self::Width) -> u16 {
         self.object_table_ptr() + (Into::<u16>::into(obj) * Self::SIZE)
+    }
+
+    fn get_attr_bytes(&self, obj: u8) -> u32 {
+        self.mem()
+            .read_u32(self.object_table_ptr() + (obj as u16 * Self::SIZE))
+    }
+
+    fn write_attr_bytes(&mut self, obj: u8, attrs: u32) {
+        self.mut_mem()
+            .write_u32(self.object_table_ptr() + (obj as u16 * Self::SIZE), attrs);
+    }
+
+    //There are 32 attrs bits across 4 bytes
+    //we need to find which byte has the attr, and then test the appropriate bit in that byte
+    fn attr_test(&self, obj: u8, attr: u8) -> bool {
+        self.get_attr_bytes(obj) & (1 << (31 - attr)) != 0
+    }
+
+    fn attr_set(&mut self, obj: Self::Width, attr: u8) {
+        self.write_attr_bytes(
+            obj.into(),
+            self.get_attr_bytes(obj.into()) | 1 << (31 - attr),
+        );
+    }
+
+    fn attr_clear(&mut self, obj: Self::Width, attr: u8) {
+        self.write_attr_bytes(
+            obj.into(),
+            self.get_attr_bytes(obj.into()) & !(1 << (31 - attr)),
+        );
+    }
+
+    fn inside(&self, obj_a: Self::Width, obj_b: Self::Width) -> bool {
+        self.mem().read_u8(self.object_ptr(obj_a) + Self::PARENT) == obj_b.into()
+    }
+
+    fn read_obj(&self, addr: u16) -> Self::Width;
+
+    fn sibling(&self, obj: Self::Width) -> Self::Width {
+        self.read_obj(self.object_ptr(obj) + Self::SIBLING)
+    }
+
+    fn parent(&self, obj: Self::Width) -> Self::Width {
+        self.read_obj(self.object_ptr(obj) + Self::PARENT)
+    }
+
+    fn child(&self, obj: Self::Width) -> Self::Width {
+        self.read_obj(self.object_ptr(obj) + Self::CHILD)
     }
 }
 
