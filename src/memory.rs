@@ -29,7 +29,7 @@ impl StackFrame {
 
     //advance stack pointer for new locals & create new stackframe
     fn push(self, stack: &mut Stack, pc: u32) -> StackFrame {
-        stack.sp = stack.sp + 16; //16 locals
+        stack.sp += 16; //16 locals
         StackFrame {
             prev: Box::new(Some(self)),
             pc,
@@ -66,12 +66,12 @@ impl Stack {
         if self.sp <= frame.bp {
             Err(Error::ZMachineError("Stack underflow".to_string()))
         } else {
-            self.sp = self.sp - 1;
-            return Ok(self[self.sp]);
+            self.sp -= 1;
+            Ok(self[self.sp])
         }
     }
 
-    fn push(&mut self, frame: &mut StackFrame, val: u16) -> Result<(), Error> {
+    fn push(&mut self, _frame: &mut StackFrame, val: u16) -> Result<(), Error> {
         let new_sp = self.sp + 1;
         self.sp = new_sp;
         if new_sp > self.stack.len() as u16 {

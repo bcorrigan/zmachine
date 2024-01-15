@@ -212,13 +212,13 @@ where
     }
 
     fn remove(&mut self, obj: T) {
-        let parent = self.parent(obj.clone());
+        let parent = self.parent(obj);
 
         if num::Zero::is_zero(&parent) {
             return;
         }
 
-        let obj_sibling = self.sibling(obj.clone());
+        let obj_sibling = self.sibling(obj);
         let mut child = self.child(obj);
 
         if child == obj {
@@ -283,14 +283,12 @@ where
                 } else {
                     2
                 }
+            } else if sz & 0x3F == 0 {
+                //if first 6 bits 111111 are all 0
+                //From stds doc: A value of 0 as property data length (in the second byte) should be interpreted as a length of 64
+                64
             } else {
-                if sz & 0x3F == 0 {
-                    //if first 6 bits 111111 are all 0
-                    //From stds doc: A value of 0 as property data length (in the second byte) should be interpreted as a length of 64
-                    64
-                } else {
-                    sz
-                }
+                sz
             }
         } else {
             (self.mem.read_u8(addr - 1) >> 5) + 1
@@ -326,30 +324,28 @@ where
                             data_length: if size & 0x40 == 0 { 1 } else { 2 },
                         };
                     }
-                } else {
-                    if size & 0x80 == 0 {
-                        if size & 0x40 == 0 {
-                            //one size & number byte, prop data length 1
-                            property_addr += 2; //1 hdr , 1 data
-                        } else {
-                            //one size & number bytes, data length 2
-                            property_addr += 3; //1 hdr, 2 data
-                        }
+                } else if size & 0x80 == 0 {
+                    if size & 0x40 == 0 {
+                        //one size & number byte, prop data length 1
+                        property_addr += 2; //1 hdr , 1 data
                     } else {
-                        let next_id = self.mem.read_u8(property_addr + 1) & 0x3f;
-                        if next_id == 0 {
-                            property_addr += 64 + 2;
-                        } else {
-                            property_addr += next_id as u16 + 2;
-                        }
+                        //one size & number bytes, data length 2
+                        property_addr += 3; //1 hdr, 2 data
+                    }
+                } else {
+                    let next_id = self.mem.read_u8(property_addr + 1) & 0x3f;
+                    if next_id == 0 {
+                        property_addr += 64 + 2;
+                    } else {
+                        property_addr += next_id as u16 + 2;
                     }
                 }
             }
-            return PropAddr {
+            PropAddr {
                 addr: 0,
                 size_bytes: 1,
                 data_length: 1,
-            };
+            }
         } else {
             //scan each property for prop_id
             while self.mem.read_u8(property_addr) != 0 {
@@ -364,11 +360,11 @@ where
                     property_addr += (size >> 5) as u16 + 2;
                 }
             }
-            return PropAddr {
+            PropAddr {
                 addr: 0,
                 size_bytes: 1,
                 data_length: 1,
-            };
+            }
         }
     }
 
@@ -379,7 +375,7 @@ where
             top_prop_table_addr + self.mem.read_u8(top_prop_table_addr) as u16 * 2 + 1;
         if Object::<T>::WIDE {
             if prop_id == 0 {
-                return (self.mem.read_u8(property_addr) * 2 + 1) & 0x3f;
+                (self.mem.read_u8(property_addr) * 2 + 1) & 0x3f
             } else {
                 let propaddr = self.get_prop_addr(obj, prop_id);
                 let mut addr = propaddr.addr;
@@ -400,23 +396,21 @@ where
                         addr += size as u16;
                     }
                 }
-                return self.mem.read_u8(addr) & 0x3f;
+                self.mem.read_u8(addr) & 0x3f
             }
+        } else if prop_id == 0 {
+            //return first prop, bits 0-4
+            self.mem.read_u8(property_addr) & 0x1f
         } else {
-            if prop_id == 0 {
-                //return first prop, bits 0-4
-                return self.mem.read_u8(property_addr) & 0x1f;
-            } else {
-                while self.mem.read_u8(property_addr) != 0 {
-                    let size = self.mem.read_u8(property_addr);
-                    if size & 0x1f == prop_id {
-                        return self.mem.read_u8(property_addr + (size >> 5) as u16 + 2) & 0x1f;
-                    } else {
-                        property_addr += (size >> 5) as u16 + 2;
-                    }
+            while self.mem.read_u8(property_addr) != 0 {
+                let size = self.mem.read_u8(property_addr);
+                if size & 0x1f == prop_id {
+                    return self.mem.read_u8(property_addr + (size >> 5) as u16 + 2) & 0x1f;
+                } else {
+                    property_addr += (size >> 5) as u16 + 2;
                 }
-                return 0;
             }
+            0
         }
     }
 
@@ -426,18 +420,16 @@ where
             if prop_addr.addr == 0 {
                 //subtract 2 so we can do 1-based indexing/access
                 let prop_ptr = self.mem.object_table() - 2;
-                return self.mem.read_u16(prop_ptr + (prop_id * 2) as u16); //tbd default_prop_ptr
-            } else {
-                if prop_addr.size_bytes & 0x80 == 0 {
-                    if prop_addr.size_bytes & 0x40 == 0 {
-                        return self.mem.read_u8(prop_addr.addr) as u16;
-                    } else {
-                        return self.mem.read_u16(prop_addr.addr);
-                    }
+                self.mem.read_u16(prop_ptr + (prop_id * 2) as u16)//tbd default_prop_ptr
+            } else if prop_addr.size_bytes & 0x80 == 0 {
+                if prop_addr.size_bytes & 0x40 == 0 {
+                    self.mem.read_u8(prop_addr.addr) as u16
                 } else {
-                    //DIE as property not byte or word sized - TODO error handling
-                    return 0;
+                    self.mem.read_u16(prop_addr.addr)
                 }
+            } else {
+                //DIE as property not byte or word sized - TODO error handling
+                0
             }
         } else {
             let mut addr = prop_addr.addr;
@@ -450,13 +442,13 @@ where
                         _ => {} //TODO die
                     }
                 } else {
-                    addr += (size >> 5 + 2) as u16;
+                    addr += (size >> (5 + 2)) as u16;
                 }
             }
 
-            return self
+            self
                 .mem
-                .read_u16((self.mem.object_table() - 2) + prop_id as u16 * 2);
+                .read_u16((self.mem.object_table() - 2) + prop_id as u16 * 2)
         }
     }
 
