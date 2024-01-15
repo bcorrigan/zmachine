@@ -168,7 +168,16 @@ where
         self.mem()
             .read_u16(self.object_ptr(self.mem().read_global(16).into()))
     }
+
+    fn get_prop_len(&self, addr: u16) -> u8;
+    //returns address to the property *value* not the size byte
+    fn get_prop_addr(&self, obj: Self, prop_id: u8) -> PropAddr;
+    fn get_prop_next(&self, obj: Self, prop_id: u8) -> u8;
+    fn get_prop(self, obj: Self, prop_id: u8) -> u16;
+    fn put_prop(self, obj: Self, prop_id: u8, val: u16);
 }
+
+impl ZObject for u8 {}
 
 trait ReadObject {
     fn read_obj(&self, addr: u16, mem: &Memory) -> Self
