@@ -19,9 +19,13 @@ where
 
 trait ZObject
 where
-    u16: From<<Self as ZObject>::Width>,
-    u8: From<<Self as ZObject>::Width>,
-    Self::Width: Copy,
+    u16: From<Self>,
+    u8: From<Self>,
+    Self: From<u16>,
+    Self: Copy,
+    Self: Sized,
+    Self: num::Zero,
+    Self: PartialEq,
 {
     type Width;
     const PARENT: u16;
@@ -38,7 +42,7 @@ where
         self.mem().object_table() + Self::PROPMAX * 2 - Self::SIZE
     }
 
-    fn object_ptr(&self, obj: Self::Width) -> u16 {
+    fn object_ptr(&self, obj: Self) -> u16 {
         self.object_table_ptr() + (Into::<u16>::into(obj) * Self::SIZE)
     }
 
@@ -58,36 +62,111 @@ where
         self.get_attr_bytes(obj) & (1 << (31 - attr)) != 0
     }
 
-    fn attr_set(&mut self, obj: Self::Width, attr: u8) {
+    fn attr_set(&mut self, obj: Self, attr: u8) {
         self.write_attr_bytes(
             obj.into(),
             self.get_attr_bytes(obj.into()) | 1 << (31 - attr),
         );
     }
 
-    fn attr_clear(&mut self, obj: Self::Width, attr: u8) {
+    fn attr_clear(&mut self, obj: Self, attr: u8) {
         self.write_attr_bytes(
             obj.into(),
             self.get_attr_bytes(obj.into()) & !(1 << (31 - attr)),
         );
     }
 
-    fn inside(&self, obj_a: Self::Width, obj_b: Self::Width) -> bool {
+    fn inside(&self, obj_a: Self, obj_b: Self) -> bool {
         self.mem().read_u8(self.object_ptr(obj_a) + Self::PARENT) == obj_b.into()
     }
 
-    fn read_obj(&self, addr: u16) -> Self::Width;
+    fn read_obj(&self, addr: u16) -> Self;
 
-    fn sibling(&self, obj: Self::Width) -> Self::Width {
+    fn sibling(&self, obj: Self) -> Self {
         self.read_obj(self.object_ptr(obj) + Self::SIBLING)
     }
 
-    fn parent(&self, obj: Self::Width) -> Self::Width {
+    fn parent(&self, obj: Self) -> Self {
         self.read_obj(self.object_ptr(obj) + Self::PARENT)
     }
 
-    fn child(&self, obj: Self::Width) -> Self::Width {
+    fn child(&self, obj: Self) -> Self {
         self.read_obj(self.object_ptr(obj) + Self::CHILD)
+    }
+
+    //address of the props table for given object
+    fn props(&self, obj: Self) -> u16 {
+        self.mem().read_u16(self.object_ptr(obj) + Self::PROPS)
+    }
+
+    fn write_sibling(&mut self, obj: Self, sibling: Self) {
+        self.mut_mem()
+            .write_u8(self.object_ptr(obj) + Self::SIBLING, sibling.into())
+    }
+
+    fn write_parent(&mut self, obj: Self, parent: Self) {
+        self.mut_mem()
+            .write_u8(self.object_ptr(obj) + Self::PARENT, parent.into())
+    }
+
+    fn write_child(&mut self, obj: Self, child: Self) {
+        self.mut_mem()
+            .write_u8(self.object_ptr(obj) + Self::CHILD, child.into())
+    }
+
+    fn remove(&mut self, obj: Self) {
+        let parent = self.parent(obj);
+
+        if num::Zero::is_zero(&parent) {
+            return;
+        }
+
+        let obj_sibling = self.sibling(obj);
+        let mut child = self.child(obj);
+
+        if child == obj {
+            //immediate child
+            self.write_child(parent, obj_sibling);
+        } else {
+            while !num::Zero::is_zero(&child) {
+                let sibling = self.child(child);
+
+                if sibling == obj {
+                    self.write_sibling(child, obj_sibling);
+                    break;
+                } else {
+                    child = sibling;
+                }
+            }
+        }
+
+        self.write_sibling(obj, num::Zero::zero());
+        self.write_parent(obj, num::Zero::zero());
+    }
+
+    fn insert(&mut self, obj: Self, dest_obj: Self) {
+        if !num::Zero::is_zero(&self.parent(obj)) {
+            self.remove(obj);
+        }
+
+        self.write_sibling(obj, self.child(dest_obj));
+        self.write_child(dest_obj, obj);
+        self.write_parent(obj, dest_obj);
+    }
+
+    //print
+    fn name(&mut self, obj: Self) -> Option<String> {
+        if self.mem().read_u8(self.props(obj)) != 0 {
+            let mut zscii = zscii::Zscii::new(self.mem());
+            Some(zscii.get_string(self.props(obj) + 1))
+        } else {
+            None
+        }
+    }
+
+    fn status(&self) -> u16 {
+        self.mem()
+            .read_u16(self.object_ptr(self.mem().read_global(16).into()))
     }
 }
 
@@ -420,7 +499,7 @@ where
             if prop_addr.addr == 0 {
                 //subtract 2 so we can do 1-based indexing/access
                 let prop_ptr = self.mem.object_table() - 2;
-                self.mem.read_u16(prop_ptr + (prop_id * 2) as u16)//tbd default_prop_ptr
+                self.mem.read_u16(prop_ptr + (prop_id * 2) as u16) //tbd default_prop_ptr
             } else if prop_addr.size_bytes & 0x80 == 0 {
                 if prop_addr.size_bytes & 0x40 == 0 {
                     self.mem.read_u8(prop_addr.addr) as u16
@@ -446,8 +525,7 @@ where
                 }
             }
 
-            self
-                .mem
+            self.mem
                 .read_u16((self.mem.object_table() - 2) + prop_id as u16 * 2)
         }
     }
