@@ -177,7 +177,7 @@ where
     fn put_prop(self, obj: Self, prop_id: u8, val: u16);
 }
 
-impl ZObject for u8 {}
+impl ZObject for Memory<u8> {}
 
 trait ReadObject {
     fn read_obj(&self, addr: u16, mem: &Memory) -> Self

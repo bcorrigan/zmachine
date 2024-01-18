@@ -1,9 +1,11 @@
 use crate::error::Error;
+use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut, Index, IndexMut};
 
-pub struct Memory {
+pub struct Memory<'a, T> {
     mem: Vec<u8>,
     stack: Stack,
+    phantom: PhantomData<&'a T>,
 }
 
 struct Stack {
@@ -19,7 +21,7 @@ struct StackFrame {
 }
 
 impl StackFrame {
-    fn main(mem: &Memory) -> StackFrame {
+    fn main<T>(mem: &Memory<T>) -> StackFrame {
         StackFrame {
             prev: Box::new(None),
             pc: mem.initial_pc() as u32,
@@ -83,7 +85,7 @@ impl Stack {
     }
 }
 
-impl Memory {
+impl<'a, T> Memory<'a, T> {
     pub fn new(story: &[u8]) -> Self {
         Memory {
             mem: story.into(),
