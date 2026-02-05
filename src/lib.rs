@@ -1,11 +1,17 @@
 #![allow(dead_code)]
-mod error;
+
+pub mod error;
+pub mod zmachine;
+pub mod zscreen;
+
 mod instruction;
 mod memory;
 mod object;
-mod zmachine;
 mod zscii;
-mod zscreen;
+
+pub use zmachine::ZMachine;
+pub use zscreen::ZScreen;
+pub use error::Error;
 
 #[cfg(test)]
 mod tests {

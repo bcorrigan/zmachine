@@ -6,7 +6,7 @@ pub struct Memory {
     pub(crate) stack: Stack,
 }
 
-pub(crate) struct Stack {
+pub struct Stack {
     stack: [u16; 4096],
     sp: u16, //stack pointer
 }
