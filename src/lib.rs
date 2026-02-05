@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 mod error;
+mod instruction;
 mod memory;
 mod object;
 mod zmachine;

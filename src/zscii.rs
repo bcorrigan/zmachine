@@ -56,7 +56,7 @@ pub struct Zscii<'a> {
 }
 
 impl<'a> Zscii<'a> {
-    pub fn new(mem: &Memory) -> Zscii {
+    pub fn new(mem: &Memory) -> Zscii<'_> {
         Zscii {
             ptr: 0u16,
             mode: Mode::A0,
@@ -77,9 +77,9 @@ impl<'a> Zscii<'a> {
             // the 'X' bit is discarded, we do some shifts/bytewise stuff to extract the rest
             // dummy's guide:
             // 0x1f = 00011111 = extract last 5 bits. Of course, 3 = 0x11
-            let byte1 = self.mem.read_u8(ptr);
+            let byte1 = self.mem.read_u8(self.ptr);
             self.ptr += 1;
-            let byte2 = self.mem.read_u8(ptr);
+            let byte2 = self.mem.read_u8(self.ptr);
             self.ptr += 1;
 
             self.decode_zchar((byte1 >> 2) & 0x1f); //AAAAA
@@ -87,11 +87,15 @@ impl<'a> Zscii<'a> {
             self.decode_zchar(byte2 & 0x1f); //CCCCC
 
             //check the X bit
-            if (byte1 & 0x80) == 0 {
+            if (byte1 & 0x80) != 0 {
                 break;
             }
         }
         self.buf.iter().collect()
+    }
+
+    pub fn get_ptr(&self) -> u16 {
+        self.ptr
     }
 
     fn decode_zchar(&mut self, ch: u8) {

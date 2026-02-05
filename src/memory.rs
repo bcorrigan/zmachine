@@ -1,46 +1,48 @@
 use crate::error::Error;
-use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut, Index, IndexMut};
 
-pub struct Memory<'a, T> {
+pub struct Memory {
     mem: Vec<u8>,
-    stack: Stack,
-    phantom: PhantomData<&'a T>,
+    pub(crate) stack: Stack,
 }
 
-struct Stack {
+pub(crate) struct Stack {
     stack: [u16; 4096],
     sp: u16, //stack pointer
 }
 
-struct StackFrame {
-    prev: Box<Option<StackFrame>>, //ie the call stack
-    pc: u32,                       //program counter
-    bp: u16, //base pointer of this stack frame - illegal for sp to drop below this
-             //locals: Vec<u16>,
+#[derive(Clone)]
+pub struct StackFrame {
+    pub prev: Box<Option<StackFrame>>, //ie the call stack
+    pub pc: u32,                       //program counter
+    pub bp: u16, //base pointer of this stack frame - illegal for sp to drop below this
+    pub return_store_var: Option<u8>,
+                 //locals: Vec<u16>,
 }
 
 impl StackFrame {
-    fn main<T>(mem: &Memory<T>) -> StackFrame {
+    pub fn main(mem: &Memory) -> StackFrame {
         StackFrame {
             prev: Box::new(None),
             pc: mem.initial_pc() as u32,
             bp: 17,
+            return_store_var: None,
         }
     }
 
     //advance stack pointer for new locals & create new stackframe
-    fn push(self, stack: &mut Stack, pc: u32) -> StackFrame {
+    pub fn push(self, stack: &mut Stack, pc: u32, return_store_var: Option<u8>) -> StackFrame {
         stack.sp += 16; //16 locals
         StackFrame {
             prev: Box::new(Some(self)),
             pc,
             bp: stack.sp,
+            return_store_var,
         }
     }
 
     //return to previous stack frame, zeroing out space used by this stack
-    fn pop(self, stack: &mut Stack) -> Result<StackFrame, Error> {
+    pub fn pop(self, stack: &mut Stack) -> Result<StackFrame, Error> {
         for p in stack.sp..=(self.bp - 16) {
             //erase current stack + 16 locals
             stack[p] = 0;
@@ -54,11 +56,11 @@ impl StackFrame {
         }
     }
 
-    fn read_local(&self, stack: &Stack, i: u16) -> u16 {
+    pub fn read_local(&self, stack: &Stack, i: u16) -> u16 {
         stack[self.bp - i]
     }
 
-    fn write_local(&self, stack: &mut Stack, i: u16, val: u16) {
+    pub fn write_local(&self, stack: &mut Stack, i: u16, val: u16) {
         stack[self.bp - i] = val;
     }
 }
@@ -74,24 +76,24 @@ impl Stack {
     }
 
     fn push(&mut self, _frame: &mut StackFrame, val: u16) -> Result<(), Error> {
-        let new_sp = self.sp + 1;
-        self.sp = new_sp;
-        if new_sp > self.stack.len() as u16 {
+        if self.sp >= self.stack.len() as u16 {
             Err(Error::ZMachineError("Stack Overflow".to_string()))
         } else {
-            self[new_sp] = val;
+            let sp = self.sp;
+            self[sp] = val;
+            self.sp += 1;
             Ok(())
         }
     }
 }
 
-impl<'a, T> Memory<'a, T> {
+impl Memory {
     pub fn new(story: &[u8]) -> Self {
         Memory {
             mem: story.into(),
             stack: Stack {
                 stack: [0u16; 4096],
-                sp: 0,
+                sp: 17,
             },
         }
     }
@@ -128,7 +130,7 @@ impl<'a, T> Memory<'a, T> {
     pub fn write_u16(&mut self, addr: u16, val: u16) {
         let vals = val.to_be_bytes();
         self[addr] = vals[0];
-        self[addr] = vals[1];
+        self[addr + 1] = vals[1];
     }
 
     pub fn load(&mut self, id: u8, frame: &mut StackFrame) -> Result<u16, Error> {
@@ -144,6 +146,25 @@ impl<'a, T> Memory<'a, T> {
             _ => {
                 //read from globals
                 Ok(self.read_global(id))
+            }
+        }
+    }
+
+    pub fn store(&mut self, id: u8, val: u16, frame: &mut StackFrame) -> Result<(), Error> {
+        match id {
+            0x00 => {
+                //push to stack
+                self.stack.push(frame, val)
+            }
+            0x01..=0x0f => {
+                //write to locals
+                frame.write_local(&mut self.stack, id as u16, val);
+                Ok(())
+            }
+            _ => {
+                //write to globals
+                self.write_u16(self.global_variables() + (id as u16 * 2), val);
+                Ok(())
             }
         }
     }

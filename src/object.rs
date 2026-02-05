@@ -1,7 +1,7 @@
 use crate::{memory::Memory, zscii};
 //use core::num::traits::Num;
 //use core::num::Num;
-use num::Integer;
+use num::{Integer, NumCast};
 use std::marker::PhantomData;
 
 /*
@@ -9,177 +9,15 @@ use std::marker::PhantomData;
  * Early z machines used 1 byte objects (ie there oculd be a total of 256 objects),
  * and later used 2 byte objects - so this code is generic across u8 & u16
  */
-struct Object<'a, T: 'a>
+pub struct Object<'a, T: 'a>
 where
-    T: Integer + Into<u8> + Into<u16> + Copy,
+    T: Integer + Into<u16> + Copy + NumCast,
 {
-    mem: &'a mut Memory,
+    pub mem: &'a mut Memory,
     phantom: PhantomData<&'a T>,
 }
 
-trait ZObject
-where
-    u16: From<Self>,
-    u8: From<Self>,
-    Self: From<u16>,
-    Self: Copy,
-    Self: Sized,
-    Self: num::Zero,
-    Self: PartialEq,
-{
-    type Width;
-    const PARENT: u16;
-    const SIBLING: u16;
-    const CHILD: u16;
-    const PROPS: u16;
-    const SIZE: u16;
-    const PROPMAX: u16;
-
-    fn mem(&self) -> &Memory;
-    fn mut_mem(&self) -> &mut Memory;
-
-    fn object_table_ptr(&self) -> u16 {
-        self.mem().object_table() + Self::PROPMAX * 2 - Self::SIZE
-    }
-
-    fn object_ptr(&self, obj: Self) -> u16 {
-        self.object_table_ptr() + (Into::<u16>::into(obj) * Self::SIZE)
-    }
-
-    fn get_attr_bytes(&self, obj: u8) -> u32 {
-        self.mem()
-            .read_u32(self.object_table_ptr() + (obj as u16 * Self::SIZE))
-    }
-
-    fn write_attr_bytes(&mut self, obj: u8, attrs: u32) {
-        self.mut_mem()
-            .write_u32(self.object_table_ptr() + (obj as u16 * Self::SIZE), attrs);
-    }
-
-    //There are 32 attrs bits across 4 bytes
-    //we need to find which byte has the attr, and then test the appropriate bit in that byte
-    fn attr_test(&self, obj: u8, attr: u8) -> bool {
-        self.get_attr_bytes(obj) & (1 << (31 - attr)) != 0
-    }
-
-    fn attr_set(&mut self, obj: Self, attr: u8) {
-        self.write_attr_bytes(
-            obj.into(),
-            self.get_attr_bytes(obj.into()) | 1 << (31 - attr),
-        );
-    }
-
-    fn attr_clear(&mut self, obj: Self, attr: u8) {
-        self.write_attr_bytes(
-            obj.into(),
-            self.get_attr_bytes(obj.into()) & !(1 << (31 - attr)),
-        );
-    }
-
-    fn inside(&self, obj_a: Self, obj_b: Self) -> bool {
-        self.mem().read_u8(self.object_ptr(obj_a) + Self::PARENT) == obj_b.into()
-    }
-
-    fn read_obj(&self, addr: u16) -> Self;
-
-    fn sibling(&self, obj: Self) -> Self {
-        self.read_obj(self.object_ptr(obj) + Self::SIBLING)
-    }
-
-    fn parent(&self, obj: Self) -> Self {
-        self.read_obj(self.object_ptr(obj) + Self::PARENT)
-    }
-
-    fn child(&self, obj: Self) -> Self {
-        self.read_obj(self.object_ptr(obj) + Self::CHILD)
-    }
-
-    //address of the props table for given object
-    fn props(&self, obj: Self) -> u16 {
-        self.mem().read_u16(self.object_ptr(obj) + Self::PROPS)
-    }
-
-    fn write_sibling(&mut self, obj: Self, sibling: Self) {
-        self.mut_mem()
-            .write_u8(self.object_ptr(obj) + Self::SIBLING, sibling.into())
-    }
-
-    fn write_parent(&mut self, obj: Self, parent: Self) {
-        self.mut_mem()
-            .write_u8(self.object_ptr(obj) + Self::PARENT, parent.into())
-    }
-
-    fn write_child(&mut self, obj: Self, child: Self) {
-        self.mut_mem()
-            .write_u8(self.object_ptr(obj) + Self::CHILD, child.into())
-    }
-
-    fn remove(&mut self, obj: Self) {
-        let parent = self.parent(obj);
-
-        if num::Zero::is_zero(&parent) {
-            return;
-        }
-
-        let obj_sibling = self.sibling(obj);
-        let mut child = self.child(obj);
-
-        if child == obj {
-            //immediate child
-            self.write_child(parent, obj_sibling);
-        } else {
-            while !num::Zero::is_zero(&child) {
-                let sibling = self.child(child);
-
-                if sibling == obj {
-                    self.write_sibling(child, obj_sibling);
-                    break;
-                } else {
-                    child = sibling;
-                }
-            }
-        }
-
-        self.write_sibling(obj, num::Zero::zero());
-        self.write_parent(obj, num::Zero::zero());
-    }
-
-    fn insert(&mut self, obj: Self, dest_obj: Self) {
-        if !num::Zero::is_zero(&self.parent(obj)) {
-            self.remove(obj);
-        }
-
-        self.write_sibling(obj, self.child(dest_obj));
-        self.write_child(dest_obj, obj);
-        self.write_parent(obj, dest_obj);
-    }
-
-    //print
-    fn name(&mut self, obj: Self) -> Option<String> {
-        if self.mem().read_u8(self.props(obj)) != 0 {
-            let mut zscii = zscii::Zscii::new(self.mem());
-            Some(zscii.get_string(self.props(obj) + 1))
-        } else {
-            None
-        }
-    }
-
-    fn status(&self) -> u16 {
-        self.mem()
-            .read_u16(self.object_ptr(self.mem().read_global(16).into()))
-    }
-
-    fn get_prop_len(&self, addr: u16) -> u8;
-    //returns address to the property *value* not the size byte
-    fn get_prop_addr(&self, obj: Self, prop_id: u8) -> PropAddr;
-    fn get_prop_next(&self, obj: Self, prop_id: u8) -> u8;
-    fn get_prop(self, obj: Self, prop_id: u8) -> u16;
-    fn put_prop(self, obj: Self, prop_id: u8, val: u16);
-}
-
-impl ZObject for Memory<u8> {}
-
-trait ReadObject {
+pub trait ReadObject {
     fn read_obj(&self, addr: u16, mem: &Memory) -> Self
     where
         Self: Sized;
@@ -197,15 +35,16 @@ impl ReadObject for u16 {
     }
 }
 
-struct PropAddr {
-    addr: u16,
+pub struct PropAddr {
+    pub addr: u16,
     size_bytes: u8,
     data_length: u8,
 }
 
-impl<'a, T> Object<'_, T>
+impl<'a, T> Object<'a, T>
 where
-    T: Integer + Into<u8> + Into<u16> + Copy + ReadObject + From<u16>,
+    T: Integer + Into<u16> + Copy + NumCast + ReadObject,
+    u16: From<T>,
 {
     const WIDE: bool = std::mem::size_of::<T>() == 2;
 
@@ -219,22 +58,29 @@ where
     const PROPS: u16 = if Object::<T>::WIDE { 12 } else { 7 };
     const SIZE: u16 = if Object::<T>::WIDE { 14 } else { 9 };
 
-    const PROPMAX: u16 = if Object::<T>::WIDE { 63 } else { 31 };
+    pub const PROPMAX: u16 = if Object::<T>::WIDE { 63 } else { 31 };
 
-    fn object_table_ptr(&self) -> u16 {
+    pub fn new(mem: &'a mut Memory) -> Object<'a, T> {
+        Object {
+            mem,
+            phantom: PhantomData,
+        }
+    }
+
+    pub fn object_table_ptr(&self) -> u16 {
         self.mem.object_table() + Object::<T>::PROPMAX * 2 - Object::<T>::SIZE
     }
 
-    fn object_ptr(&self, obj: T) -> u16 {
+    pub fn object_ptr(&self, obj: T) -> u16 {
         self.object_table_ptr() + (Into::<u16>::into(obj) * Object::<T>::SIZE)
     }
 
-    fn get_attr_bytes(&self, obj: u8) -> u32 {
+    pub fn get_attr_bytes(&self, obj: u8) -> u32 {
         self.mem
             .read_u32(self.object_table_ptr() + (obj as u16 * Object::<T>::SIZE))
     }
 
-    fn write_attr_bytes(&mut self, obj: u8, attrs: u32) {
+    pub fn write_attr_bytes(&mut self, obj: u8, attrs: u32) {
         self.mem.write_u32(
             self.object_table_ptr() + (obj as u16 * Object::<T>::SIZE),
             attrs,
@@ -243,63 +89,65 @@ where
 
     //There are 32 attrs bits across 4 bytes
     //we need to find which byte has the attr, and then test the appropriate bit in that byte
-    fn attr_test(&self, obj: u8, attr: u8) -> bool {
+    pub fn attr_test(&self, obj: u8, attr: u8) -> bool {
         self.get_attr_bytes(obj) & (1 << (31 - attr)) != 0
     }
 
-    fn attr_set(&mut self, obj: T, attr: u8) {
+    pub fn attr_set(&mut self, obj: T, attr: u8) {
+        let obj_u8: u8 = num::cast(obj.into()).unwrap_or(0);
         self.write_attr_bytes(
-            obj.into(),
-            self.get_attr_bytes(obj.into()) | 1 << (31 - attr),
+            obj_u8,
+            self.get_attr_bytes(obj_u8) | 1 << (31 - attr),
         );
     }
 
-    fn attr_clear(&mut self, obj: T, attr: u8) {
+    pub fn attr_clear(&mut self, obj: T, attr: u8) {
+        let obj_u8: u8 = num::cast(obj.into()).unwrap_or(0);
         self.write_attr_bytes(
-            obj.into(),
-            self.get_attr_bytes(obj.into()) & !(1 << (31 - attr)),
+            obj_u8,
+            self.get_attr_bytes(obj_u8) & !(1 << (31 - attr)),
         );
     }
 
-    fn inside(&self, obj_a: T, obj_b: T) -> bool {
+    pub fn inside(&self, obj_a: T, obj_b: T) -> bool {
         self.mem
-            .read_u8(self.object_ptr(obj_a) + Object::<T>::PARENT)
+            .read_u8(self.object_ptr(obj_a) + Object::<T>::PARENT) as u16
             == obj_b.into()
     }
 
-    fn sibling(&self, obj: T) -> T {
+    pub fn sibling(&self, obj: T) -> T {
         obj.read_obj(self.object_ptr(obj) + Object::<T>::SIBLING, self.mem)
     }
 
-    fn parent(&self, obj: T) -> T {
+    pub fn parent(&self, obj: T) -> T {
         obj.read_obj(self.object_ptr(obj) + Object::<T>::PARENT, self.mem)
     }
 
-    fn child(&self, obj: T) -> T {
+    pub fn child(&self, obj: T) -> T {
         obj.read_obj(self.object_ptr(obj) + Object::<T>::CHILD, self.mem)
     }
 
     //address of the props table for given object
-    fn props(&self, obj: T) -> u16 {
+    pub fn props(&self, obj: T) -> u16 {
         self.mem.read_u16(self.object_ptr(obj) + Object::<T>::PROPS)
     }
 
-    fn write_sibling(&mut self, obj: T, sibling: T) {
+    pub fn write_sibling(&mut self, obj: T, sibling: T) {
         self.mem
-            .write_u8(self.object_ptr(obj) + Object::<T>::SIBLING, sibling.into())
+            .write_u8(self.object_ptr(obj) + Object::<T>::SIBLING, num::cast(sibling.into()).unwrap_or(0))
     }
 
-    fn write_parent(&mut self, obj: T, parent: T) {
+    pub fn write_parent(&mut self, obj: T, parent: T) {
         self.mem
-            .write_u8(self.object_ptr(obj) + Object::<T>::PARENT, parent.into())
+            .write_u8(self.object_ptr(obj) + Object::<T>::PARENT, num::cast(parent.into()).unwrap_or(0))
     }
 
-    fn write_child(&mut self, obj: T, child: T) {
+    pub fn write_child(&mut self, obj: T, child: T) {
         self.mem
-            .write_u8(self.object_ptr(obj) + Object::<T>::CHILD, child.into())
+            .write_u8(self.object_ptr(obj) + Object::<T>::CHILD, num::cast(child.into()).unwrap_or(0))
     }
 
-    fn remove(&mut self, obj: T) {
+    pub fn remove(&mut self, obj: T) {
         let parent = self.parent(obj);
 
         if num::Zero::is_zero(&parent) {
@@ -307,14 +155,14 @@ where
         }
 
         let obj_sibling = self.sibling(obj);
-        let mut child = self.child(obj);
+        let mut child = self.child(parent);
 
         if child == obj {
             //immediate child
             self.write_child(parent, obj_sibling);
         } else {
             while !num::Zero::is_zero(&child) {
-                let sibling = self.child(child);
+                let sibling = self.sibling(child);
 
                 if sibling == obj {
                     self.write_sibling(child, obj_sibling);
@@ -329,7 +177,7 @@ where
         self.write_parent(obj, num::Zero::zero());
     }
 
-    fn insert(&mut self, obj: T, dest_obj: T) {
+    pub fn insert(&mut self, obj: T, dest_obj: T) {
         if !num::Zero::is_zero(&self.parent(obj)) {
             self.remove(obj);
         }
@@ -341,7 +189,7 @@ where
 
     //print
 
-    fn name(&mut self, obj: T) -> Option<String> {
+    pub fn name(&mut self, obj: T) -> Option<String> {
         if self.mem.read_u8(self.props(obj)) != 0 {
             let mut zscii = zscii::Zscii::new(self.mem);
             Some(zscii.get_string(self.props(obj) + 1))
@@ -350,13 +198,29 @@ where
         }
     }
 
-    fn status(&self) -> u16 {
+    pub fn status(&self) -> u16 {
+        let global_val = self.mem.read_global(16);
+        // We need to convert u16 global val to T (u8 or u16).
+        // Since T is Integer + Copy, maybe use num::cast if we add the bound, 
+        // or since we know T is u8 or u16, and we want to index...
+        // Actually, we can just cast to usize or similar?
+        // But `object_ptr` takes `T`.
+        // Let's rely on T implementing TryFrom<u16> or similar?
+        // Or cleaner: just use `num::cast::cast`.
+        // But we didn't import `cast`.
+        // Let's try `T::try_from(global_val).unwrap_or_else(|_| T::zero())` if we add TryFrom.
+        // Or simpler hack: (global_val as u8).into() ? No.
+        // Given existing bounds `T: Integer ...`, `num::NumCast` is usually implemented.
+        // Let's check imports. `use num::Integer;`
+        // Let's use `num::cast` if available.
+        // T::from_u16(global_val).unwrap()
+        let obj_id = T::from(global_val).unwrap_or_else(|| T::zero()); // Fallback or panic?
         self.mem
-            .read_u16(self.object_ptr(T::from(self.mem.read_global(16))))
+            .read_u16(self.object_ptr(obj_id))
     }
 
     //The property number occupies the bottom 6 bits of the first size byte.
-    fn get_prop_len(&self, addr: u16) -> u8 {
+    pub fn get_prop_len(&self, addr: u16) -> u8 {
         //see sections 12.4.2.1.1 - 12.4.2.2 in standards doc:
         //If the top bit (bit 7) of the first size byte is clear, then there is only one size-and-number byte.
         //Bits 0 to 5 contain the property number; bit 6 is either clear to indicate a property data length of 1,
@@ -384,7 +248,7 @@ where
     }
 
     //returns address to the property *value* not the size byte
-    fn get_prop_addr(&self, obj: T, prop_id: u8) -> PropAddr {
+    pub fn get_prop_addr(&self, obj: T, prop_id: u8) -> PropAddr {
         let top_prop_table_addr = self.props(obj);
         //skip name to first property
         let mut property_addr =
@@ -456,7 +320,7 @@ where
         }
     }
 
-    fn get_prop_next(&self, obj: T, prop_id: u8) -> u8 {
+    pub fn get_prop_next(&self, obj: T, prop_id: u8) -> u8 {
         let top_prop_table_addr = self.props(obj);
         //skip name to first property
         let mut property_addr =
@@ -502,7 +366,7 @@ where
         }
     }
 
-    fn get_prop(self, obj: T, prop_id: u8) -> u16 {
+    pub fn get_prop(self, obj: T, prop_id: u8) -> u16 {
         let prop_addr = self.get_prop_addr(obj, prop_id);
         if Object::<T>::WIDE {
             if prop_addr.addr == 0 {
@@ -539,7 +403,7 @@ where
         }
     }
 
-    fn put_prop(self, obj: T, prop_id: u8, val: u16) {
+    pub fn put_prop(self, obj: T, prop_id: u8, val: u16) {
         let prop_addr = self.get_prop_addr(obj, prop_id);
         if Object::<T>::WIDE {
             if prop_addr.addr == 0 {
